@@ -49,7 +49,7 @@
 #include "circqueue.h"
 
 // Private constants
-#define STACK_SIZE_BYTES 1504
+#define STACK_SIZE_BYTES 2504
 #define TASK_PRIORITY PIOS_THREAD_PRIO_NORMAL
 
 #define AF_NUMX 13
@@ -170,7 +170,7 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 }
 
 static void UpdateSystemIdent(const float *X, const float *noise,
-		float dT_s, uint32_t predicts, uint32_t spills) {
+		float dT_s, uint32_t predicts, uint32_t spills, const float *P) {
 	SystemIdentData relay;
 	relay.Beta[SYSTEMIDENT_BETA_ROLL]    = X[6];
 	relay.Beta[SYSTEMIDENT_BETA_PITCH]   = X[7];
@@ -190,6 +190,22 @@ static void UpdateSystemIdent(const float *X, const float *noise,
 	relay.NumAfPredicts = predicts;
 	relay.NumSpilledPts = spills;
 
+	if (P) {
+		relay.CovarianceMatrix[0] = P[0];
+		relay.CovarianceMatrix[1] = P[1];
+		relay.CovarianceMatrix[2] = P[2];
+		relay.CovarianceMatrix[3] = P[4];
+		relay.CovarianceMatrix[4] = P[6];
+		relay.CovarianceMatrix[5] = P[8];
+		relay.CovarianceMatrix[6] = P[11];
+		relay.CovarianceMatrix[7] = P[14];
+		relay.CovarianceMatrix[8] = P[17];
+		relay.CovarianceMatrix[9] = P[27];
+		relay.CovarianceMatrix[10] = P[32];
+		relay.CovarianceMatrix[11] = P[37];
+		relay.CovarianceMatrix[12] = P[42];
+	}
+	
 	SystemIdentSet(&relay);
 }
 
@@ -282,7 +298,7 @@ static void AutotuneTask(void *parameters)
 
 					af_init(X,P);
 
-					UpdateSystemIdent(X, NULL, 0.0f, 0, 0);
+					UpdateSystemIdent(X, NULL, 0.0f, 0, 0, NULL);
 
 					state = AT_START;
 
@@ -354,7 +370,7 @@ static void AutotuneTask(void *parameters)
 					// Update uavo every 256 cycles to avoid
 					// telemetry spam
 					if (!((update_counter++) & 0xff)) {
-						UpdateSystemIdent(X, noise, dT_s, update_counter, at_points_spilled);
+						UpdateSystemIdent(X, noise, dT_s, update_counter, at_points_spilled, P);
 					}
 
 					for (uint32_t i = 0; i < 3; i++) {
@@ -377,7 +393,7 @@ static void AutotuneTask(void *parameters)
 
 				// Wait until disarmed and landed before saving the settings
 
-				UpdateSystemIdent(X, noise, 0, update_counter, at_points_spilled);
+				UpdateSystemIdent(X, noise, 0, update_counter, at_points_spilled, P);
 
 				state = AT_WAITING;	// Fall through
 
