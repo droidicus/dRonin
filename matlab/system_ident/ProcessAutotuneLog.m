@@ -1,4 +1,4 @@
-function [] = ProcessAutotuneLog(fileStr)
+function [] = ProcessAutotuneLog(fileStr, makeGraphs)
 %/**
 % ******************************************************************************
 % * @file       ProcessAutotuneLog.m
@@ -34,19 +34,21 @@ function [] = ProcessAutotuneLog(fileStr)
   LogConvert(fileStr, true);
   LogData = load([fileStr(1:end-3) 'mat']);
   
-  %make some pretty pictures
-  figure; plot(LogData.SystemIdent.NumAfPredicts(10:end), [LogData.SystemIdent.Noise(:,10:end)]);
-  legend('Roll', 'Pitch', 'Yaw');
-  title('Noise');
-  figure; plot(LogData.SystemIdent.NumAfPredicts(10:end), [LogData.SystemIdent.Bias(:,10:end)]);
-  legend('Roll', 'Pitch', 'Yaw');
-  title('Bias');
-  figure; plot(LogData.SystemIdent.NumAfPredicts(10:end), [LogData.SystemIdent.Beta(:,10:end)]);
-  legend('Roll', 'Pitch', 'Yaw');
-  title('Beta');
-  figure; plot(LogData.SystemIdent.NumAfPredicts(10:end), 1000*exp(LogData.SystemIdent.Tau(10:end)));
-  title('Tau (ms)');
-
+  if makeGraphs
+    %make some pretty pictures
+%    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), [LogData.SystemIdent.Noise(:,10:end-1)]);
+%    legend('Roll', 'Pitch', 'Yaw');
+%    title('Noise');
+%    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), [LogData.SystemIdent.Bias(:,10:end-1)]);
+%    legend('Roll', 'Pitch', 'Yaw');
+%    title('Bias');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), [LogData.SystemIdent.Beta(:,10:end-1)]);
+    legend('Roll', 'Pitch', 'Yaw');
+    title('Beta');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), 1000*exp(LogData.SystemIdent.Tau(10:end-1)));
+    title('Tau (ms)');
+  end
+  
   %default values
   ghf = 0.01;%m_autotune->rateNoise->value() / 1000.0;
   damp = 1.1;%m_autotune->rateDamp->value() / 100.0;
@@ -106,22 +108,50 @@ function [] = ProcessAutotuneLog(fileStr)
     Pitchkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Pitchkp(ii) * tau_d);
 
     DerivativeCutoff(ii) = 1 / (2*pi*tau_d);
-    %disp(DerivativeCutoff(ii));
     NaturalFrequency(ii) = wn / 2 / pi;
-    %disp(NaturalFrequency(ii));
   end
   
-  %make more pretty pictures
-  figure; plot(LogData.SystemIdent.NumAfPredicts, DerivativeCutoff);
-  title('DerivativeCutoff');
-  figure; plot(LogData.SystemIdent.NumAfPredicts, NaturalFrequency);
-  title('NaturalFrequency');
-  figure; plot(LogData.SystemIdent.NumAfPredicts, kp_o);
-  title('Outer Kp');
-  figure; plot(LogData.SystemIdent.NumAfPredicts, [Rollki; Rollkp; Rollkd]');
-  legend('Rollki', 'Rollkp', 'Rollkd');
-  figure; plot(LogData.SystemIdent.NumAfPredicts, [Pitchki; Pitchkp; Pitchkd]');
-  legend('Pitchki', 'Pitchkp', 'Pitchkd');
+  if makeGraphs
+    %make more pretty pictures
+%    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), DerivativeCutoff(1:end-1));
+%    title('DerivativeCutoff');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), NaturalFrequency(1:end-1));
+    title('NaturalFrequency');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), kp_o(1:end-1));
+    title('Outer Kp');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), [Rollki(1:end-1); Rollkp(1:end-1); Rollkd(1:end-1)]');
+    title('Roll PID Values');
+    legend('Rollki', 'Rollkp', 'Rollkd');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), [Pitchki(1:end-1); Pitchkp(1:end-1); Pitchkd(1:end-1)]');
+    title('Pitch PID Values');
+    legend('Pitchki', 'Pitchkp', 'Pitchkd');
+  end
   
-  % TODO, implement covariance trace figure of merrit
+  % Covariance trace figure of merrit
+  traceFOM = sum(LogData.SystemIdent.CovarianceMatrix,1);
+  if makeGraphs
+    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), traceFOM(10:end-1));
+    title('tr(P)');
+  end
+  
+  % find the best trace in the second half of the tuning run, exclude any data points where NumAfPredicts is zero (invalid data)
+  [convValue convPoint] = min(traceFOM(end/2:end) + 1000*(!LogData.SystemIdent.NumAfPredicts(end/2:end)));
+  convPoint = round(convPoint + size(traceFOM,2)/2 - 1);
+  
+  printf('\nMinimum Tr(P) value in last half: %f\n', convValue);
+  printf('Minimum Tr(P) location in last half: %f\n', convPoint);
+  printf('Minimum Tr(P) NumAfPredicts in last half: %f\n', LogData.SystemIdent.NumAfPredicts(convPoint));
+  
+  % print data and converged PID values
+  printf('Achieved Tau (ms): %f\n', 1000*exp(LogData.SystemIdent.Tau(convPoint)));
+  
+  printf('\nOptimal Roll Kp: %f\n', Rollkp(convPoint));
+  printf('Optimal Roll Ki: %f\n', Rollki(convPoint));
+  printf('Optimal Roll Kd: %f\n', Rollkd(convPoint));
+  
+  printf('\nOptimal Pitch Kp: %f\n', Pitchkp(convPoint));
+  printf('Optimal Pitch Ki: %f\n', Pitchki(convPoint));
+  printf('Optimal Pitch Kd: %f\n', Pitchkd(convPoint));
+  
+  printf('\nOuter Kp: %f\n', kp_o(convPoint));
   
