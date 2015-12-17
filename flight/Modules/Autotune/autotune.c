@@ -49,7 +49,7 @@
 #include "circqueue.h"
 
 // Private constants
-#define STACK_SIZE_BYTES 2504
+#define STACK_SIZE_BYTES 5504
 #define TASK_PRIORITY PIOS_THREAD_PRIO_NORMAL
 
 #define AF_NUMX 13
@@ -171,42 +171,49 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 
 static void UpdateSystemIdent(const float *X, const float *noise,
 		float dT_s, uint32_t predicts, uint32_t spills, const float *P) {
-	SystemIdentData relay;
-	relay.Beta[SYSTEMIDENT_BETA_ROLL]    = X[6];
-	relay.Beta[SYSTEMIDENT_BETA_PITCH]   = X[7];
-	relay.Beta[SYSTEMIDENT_BETA_YAW]     = X[8];
-	relay.Bias[SYSTEMIDENT_BIAS_ROLL]    = X[10];
-	relay.Bias[SYSTEMIDENT_BIAS_PITCH]   = X[11];
-	relay.Bias[SYSTEMIDENT_BIAS_YAW]     = X[12];
-	relay.Tau                            = X[9];
+	SystemIdentData systemIdent;
+	systemIdent.Beta[SYSTEMIDENT_BETA_ROLL]    = X[6];
+	systemIdent.Beta[SYSTEMIDENT_BETA_PITCH]   = X[7];
+	systemIdent.Beta[SYSTEMIDENT_BETA_YAW]     = X[8];
+	systemIdent.Bias[SYSTEMIDENT_BIAS_ROLL]    = X[10];
+	systemIdent.Bias[SYSTEMIDENT_BIAS_PITCH]   = X[11];
+	systemIdent.Bias[SYSTEMIDENT_BIAS_YAW]     = X[12];
+	systemIdent.Tau                            = X[9];
+
+	systemIdent.X[0] = X[0];
+	systemIdent.X[1] = X[1];
+	systemIdent.X[2] = X[2];
+	systemIdent.X[3] = X[3];
+	systemIdent.X[4] = X[4];
+	systemIdent.X[5] = X[5];
 
 	if (noise) {
-		relay.Noise[SYSTEMIDENT_NOISE_ROLL]  = noise[0];
-		relay.Noise[SYSTEMIDENT_NOISE_PITCH] = noise[1];
-		relay.Noise[SYSTEMIDENT_NOISE_YAW]   = noise[2];
+		systemIdent.Noise[SYSTEMIDENT_NOISE_ROLL]  = noise[0];
+		systemIdent.Noise[SYSTEMIDENT_NOISE_PITCH] = noise[1];
+		systemIdent.Noise[SYSTEMIDENT_NOISE_YAW]   = noise[2];
 	}
-	relay.Period = dT_s * 1000.0f;
+	systemIdent.Period = dT_s * 1000.0f;
 
-	relay.NumAfPredicts = predicts;
-	relay.NumSpilledPts = spills;
+	systemIdent.NumAfPredicts = predicts;
+	systemIdent.NumSpilledPts = spills;
 
 	if (P) {
-		relay.CovarianceMatrix[0] = P[0];
-		relay.CovarianceMatrix[1] = P[1];
-		relay.CovarianceMatrix[2] = P[2];
-		relay.CovarianceMatrix[3] = P[4];
-		relay.CovarianceMatrix[4] = P[6];
-		relay.CovarianceMatrix[5] = P[8];
-		relay.CovarianceMatrix[6] = P[11];
-		relay.CovarianceMatrix[7] = P[14];
-		relay.CovarianceMatrix[8] = P[17];
-		relay.CovarianceMatrix[9] = P[27];
-		relay.CovarianceMatrix[10] = P[32];
-		relay.CovarianceMatrix[11] = P[37];
-		relay.CovarianceMatrix[12] = P[42];
+		systemIdent.CovarianceMatrix[0] = P[0];
+		systemIdent.CovarianceMatrix[1] = P[1];
+		systemIdent.CovarianceMatrix[2] = P[2];
+		systemIdent.CovarianceMatrix[3] = P[4];
+		systemIdent.CovarianceMatrix[4] = P[6];
+		systemIdent.CovarianceMatrix[5] = P[8];
+		systemIdent.CovarianceMatrix[6] = P[11];
+		systemIdent.CovarianceMatrix[7] = P[14];
+		systemIdent.CovarianceMatrix[8] = P[17];
+		systemIdent.CovarianceMatrix[9] = P[27];
+		systemIdent.CovarianceMatrix[10] = P[32];
+		systemIdent.CovarianceMatrix[11] = P[37];
+		systemIdent.CovarianceMatrix[12] = P[42];
 	}
 	
-	SystemIdentSet(&relay);
+	SystemIdentSet(&systemIdent);
 }
 
 static void UpdateStabilizationDesired(bool doingIdent) {
