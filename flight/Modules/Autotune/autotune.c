@@ -61,6 +61,7 @@ enum AUTOTUNE_STATE { AT_INIT, AT_START, AT_RUN, AT_FINISHED, AT_WAITING };
 struct at_queued_data {
 	float y[3];	/* Gyro measurements */
 	float u[3];	/* Actuator desired */
+	float t; /* Throttle desired */
 
 	uint32_t raw_time;	/* From PIOS_DELAY_GetRaw() */
 };
@@ -74,7 +75,7 @@ static volatile uint32_t at_points_spilled;
 
 // Private functions
 static void AutotuneTask(void *parameters);
-static void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s);
+static void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in);
 static void af_init(float X[AF_NUMX], float P[AF_NUMP]);
 
 #ifndef AT_QUEUE_NUMELEM
@@ -161,6 +162,8 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 	q_item->u[0] = actuators.Roll;
 	q_item->u[1] = actuators.Pitch;
 	q_item->u[2] = actuators.Yaw;
+
+	q_item->t = actuators.Throttle;
 
 	if (circ_queue_advance_write(at_queue) != 0) {
 		last_sample_unpushed = true;
@@ -372,7 +375,7 @@ static void AutotuneTask(void *parameters)
 
 					last_time = pt->raw_time;
 
-					af_predict(X, P, pt->u, pt->y, dT_s);
+					af_predict(X, P, pt->u, pt->y, dT_s, pt->t);
 
 					// Update uavo every 256 cycles to avoid
 					// telemetry spam
@@ -437,7 +440,7 @@ static void AutotuneTask(void *parameters)
  * @param[in] the current control inputs (roll, pitch, yaw)
  * @param[in] the gyro measurements
  */
-__attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s)
+__attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in)
 {
 	const float Ts = dT_s;
 	const float Tsq = Ts * Ts;
@@ -465,9 +468,9 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
 	const float bias3 = X[12];       // bias in the yaw torque
 
 	// inputs to the system (roll, pitch, yaw)
-	const float u1_in = u_in[0];
-	const float u2_in = u_in[1];
-	const float u3_in = u_in[2];
+	const float u1_in = 4*t_in*u_in[0];
+	const float u2_in = 4*t_in*u_in[1];
+	const float u3_in = 4*t_in*u_in[2];
 
 	// measurements from gyro
 	const float gyro_x = gyro[0];
@@ -487,10 +490,10 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
 	/**** filter parameters ****/
 	const float q_w = 1e-4f;
 	const float q_ud = 1e-4f;
-	const float q_B = 1e-5f;
-	const float q_tau = 1e-5f;
+	const float q_B = 1e-7f;
+	const float q_tau = 1e-7f;
 	const float q_bias = 1e-19f;
-	const float s_a = 3000.0f;  // expected gyro noise
+	const float s_a = 15;//3000.0f;  // expected gyro noise
 
 	const float Q[AF_NUMX] = {q_w, q_w, q_w, q_ud, q_ud, q_ud, q_B, q_B, q_B, q_tau, q_bias, q_bias, q_bias};
 

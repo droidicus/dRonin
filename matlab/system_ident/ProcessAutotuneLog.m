@@ -106,6 +106,16 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
     Pitchki(ii) = a * b * wn * wn * tau * tau_d / beta;
     Pitchkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Pitchki(ii)*tau_d);
     Pitchkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Pitchkp(ii) * tau_d);
+    
+    beta = exp(LogData.SystemIdent.Beta(Roll, ii));
+    Rollki(ii) = a * b * wn * wn * tau * tau_d / beta;
+    Rollkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Rollki(ii)*tau_d);
+    Rollkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Rollkp(ii) * tau_d);
+
+    beta = exp(LogData.SystemIdent.Beta(Yaw, ii));
+    Yawki(ii) = a * b * wn * wn * tau * tau_d / beta;
+    Yawkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Yawki(ii)*tau_d);
+    Yawkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Yawkp(ii) * tau_d);
 
     DerivativeCutoff(ii) = 1 / (2*pi*tau_d);
     NaturalFrequency(ii) = wn / 2 / pi;
@@ -125,10 +135,25 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
     figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), [Pitchki(1:end-1); Pitchkp(1:end-1); Pitchkd(1:end-1)]');
     title('Pitch PID Values');
     legend('Pitchki', 'Pitchkp', 'Pitchkd');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), [Yawki(1:end-1); Yawkp(1:end-1); Yawkd(1:end-1)]');
+    title('Yaw PID Values');
+    legend('Yawki', 'Yawkp', 'Yawkd');
   end
   
+  % Recreate the X vector
+  X = [LogData.SystemIdent.X; LogData.SystemIdent.Beta; LogData.SystemIdent.Tau; LogData.SystemIdent.Bias];
+  
   % Covariance trace figure of merrit
-  traceFOM = sum(LogData.SystemIdent.CovarianceMatrix,1);
+  traceFOMRaw = sum(LogData.SystemIdent.CovarianceMatrix,1);
+  % Covariance trace with each element scaled by the value of the variences at 30seconds in
+  traceFOMScaled = sum(LogData.SystemIdent.CovarianceMatrix ./ LogData.SystemIdent.CovarianceMatrix(:,round(end/2)),1);
+  %
+  traceFOMIndexOfDispersion = sum(LogData.SystemIdent.CovarianceMatrix ./ mean(abs(X),2),1);
+  %
+  traceFOMCoefficientOfVariation = sum(sqrt(LogData.SystemIdent.CovarianceMatrix) ./ mean(abs(X),2),1);
+  % select which FOM to use
+  traceFOM = traceFOMRaw;
+  
   if makeGraphs
     figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), traceFOM(10:end-1));
     title('tr(P)');
@@ -137,6 +162,10 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
   % find the best trace in the second half of the tuning run, exclude any data points where NumAfPredicts is zero (invalid data)
   [convValue convPoint] = min(traceFOM(end/2:end) + 1000*(!LogData.SystemIdent.NumAfPredicts(end/2:end)));
   convPoint = round(convPoint + size(traceFOM,2)/2 - 1);
+  
+  printf('\n\n**********************************************\n');
+  printf('*************** Output Results ***************\n');
+  printf('**********************************************\n');
   
   printf('\nMinimum Tr(P) value in last half: %f\n', convValue);
   printf('Minimum Tr(P) location in last half: %f\n', convPoint);
@@ -152,6 +181,14 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
   printf('\nOptimal Pitch Kp: %f\n', Pitchkp(convPoint));
   printf('Optimal Pitch Ki: %f\n', Pitchki(convPoint));
   printf('Optimal Pitch Kd: %f\n', Pitchkd(convPoint));
+  
+  % Results for the yaw PID values are not proven yet, results seem to be similar to Fujotuning for some flight configurations
+  printf('\nvvv DONT USE THESE YAW VALUES UNLESS YOU KNOW YOU WANT TO!! vvv');
+  printf('\nOptimal Yaw Kp: %f\n', Yawkp(convPoint));
+  printf('Optimal Yaw Ki: %f\n', Yawki(convPoint));
+  printf('Optimal Yaw Kd: %f\n', Yawkd(convPoint));
+  printf('^^^ DONT USE THESE YAW VALUES UNLESS YOU KNOW YOU WANT TO!! ^^^\n');
+  % Results for the yaw PID values are not proven yet, results seem to be similar to Fujotuning for some flight configurations
   
   printf('\nOuter Kp: %f\n', kp_o(convPoint));
   
