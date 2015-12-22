@@ -1,15 +1,15 @@
 /**
  ******************************************************************************
- * @addtogroup PIOS PIOS Core hardware abstraction layer
+ * @addtogroup PIOS PIOS SetMode hardware abstraction layer
  * @{
  * @addtogroup   PIOS_SERVO RC Servo Functions
  * @{
  *
- * @file       pios_servo.h  
+ * @file       pios_servosetmode.h  
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2010.
  * @author     Tau Labs, http://taulabs.org, Copyright (C) 2015
  * @author     dRonin, http://dronin.org Copyright (C) 2015
- * @brief      RC Servo functions header.
+ * @brief      RC Servo SetMode functions header.
  * @see        The GNU Public License (GPL) Version 3
  *
  *****************************************************************************/
@@ -29,20 +29,13 @@
  * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef PIOS_SERVO_H
-#define PIOS_SERVO_H
-
-enum pwm_mode {PWM_MODE_1MHZ, PWM_MODE_12MHZ};
+#ifndef PIOS_SERVOSETMODE_H
+#define PIOS_SERVOSETMODE_H
 
 /* Public Functions */
-#if defined(PIOS_INCLUDE_HPWM)
-extern void PIOS_Servo_Set(uint8_t servo, float position);
-extern void PIOS_Servo_Update();
-#else
-extern void PIOS_Servo_Set(uint8_t Servo, uint16_t Position);
-#endif
+extern void PIOS_Servo_SetMode(const uint16_t * update_rates, const enum pwm_mode *pwm_mdoe, uint8_t banks);
 
-#endif /* PIOS_SERVO_H */
+#endif /* PIOS_SERVOSETMODE_H */
 
 /**
   * @}
