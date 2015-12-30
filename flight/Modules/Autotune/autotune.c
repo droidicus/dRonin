@@ -53,7 +53,7 @@
 #define TASK_PRIORITY PIOS_THREAD_PRIO_NORMAL
 
 #define AF_NUMX 14
-#define AF_NUMP 57
+#define AF_NUMP 44
 
 // Private types
 enum AUTOTUNE_STATE { AT_INIT, AT_START, AT_RUN, AT_FINISHED, AT_WAITING };
@@ -211,11 +211,11 @@ static void UpdateSystemIdent(const float *X, const float *noise,
 		systemIdent.CovarianceMatrix[6] = P[11];
 		systemIdent.CovarianceMatrix[7] = P[14];
 		systemIdent.CovarianceMatrix[8] = P[17];
-		systemIdent.CovarianceMatrix[9] = P[27];
-		systemIdent.CovarianceMatrix[10] = P[38];
-		systemIdent.CovarianceMatrix[11] = P[44];
-		systemIdent.CovarianceMatrix[12] = P[50];
-		systemIdent.CovarianceMatrix[13] = P[56];
+		systemIdent.CovarianceMatrix[9] = P[24];
+		systemIdent.CovarianceMatrix[10] = P[28];
+		systemIdent.CovarianceMatrix[11] = P[33];
+		systemIdent.CovarianceMatrix[12] = P[38];
+		systemIdent.CovarianceMatrix[13] = P[43];
 	}
 	
 	SystemIdentSet(&systemIdent);
@@ -518,63 +518,50 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
     const float Ts_e_tauy4 = Ts_e_tauy2 * Ts_e_tauy2;
 
 	// covariance propagation - D is stored copy of covariance	
-	P[0] = D[0] + Q[0] + 2*Ts*e_b1*(D[3] - D[39] - D[9]*bias1 + D[9]*u1) + Tsq*(e_b1*e_b1)*(D[4] - 2*D[40] + D[44] - 2*D[10]*bias1 + 2*D[41]*bias1 + 2*D[10]*u1 - 2*D[41]*u1 + D[11]*(bias1*bias1) + D[11]*(u1*u1) - 2*D[11]*bias1*u1);
-	P[1] = D[1] + Q[1] + 2*Ts*e_b2*(D[5] - D[45] - D[12]*bias2 + D[12]*u2) + Tsq*(e_b2*e_b2)*(D[6] - 2*D[46] + D[50] - 2*D[13]*bias2 + 2*D[47]*bias2 + 2*D[13]*u2 - 2*D[47]*u2 + D[14]*(bias2*bias2) + D[14]*(u2*u2) - 2*D[14]*bias2*u2);
-	P[2] = D[2] + Q[2] + 2*Ts*e_b3*(D[7] - D[51] - D[15]*bias3 + D[15]*u3) + Tsq*(e_b3*e_b3)*(D[8] - 2*D[52] + D[56] - 2*D[16]*bias3 + 2*D[53]*bias3 + 2*D[16]*u3 - 2*D[53]*u3 + D[17]*(bias3*bias3) + D[17]*(u3*u3) - 2*D[17]*bias3*u3);
-	P[3] = (D[3]*e_tau2 + D[3]*Ts*e_tau + D[4]*Ts*(e_b1*e_tau2) - D[40]*Ts*(e_b1*e_tau2) + D[4]*Tsq*(e_b1*e_tau) - D[40]*Tsq*(e_b1*e_tau) + D[18]*Ts*u1*e_tau - D[18]*Ts*u1_in*e_tau - D[10]*Ts*bias1*(e_b1*e_tau2) - D[10]*Tsq*bias1*(e_b1*e_tau) + D[10]*Ts*u1*(e_b1*e_tau2) + D[10]*Tsq*u1*(e_b1*e_tau) + D[21]*Tsq*u1*(e_b1*e_tau) - D[42]*Tsq*u1*(e_b1*e_tau) - D[21]*Tsq*u1_in*(e_b1*e_tau) + D[42]*Tsq*u1_in*(e_b1*e_tau) + D[24]*Tsq*(u1*u1)*(e_b1*e_tau) - D[24]*Tsq*bias1*u1*(e_b1*e_tau) + D[24]*Tsq*bias1*u1_in*(e_b1*e_tau) - D[24]*Tsq*u1*u1_in*(e_b1*e_tau))/Ts_e_tau2;
-	P[4] = (Q[3]*Tsq4 + D[4]*e_tau4 + Q[3]*e_tau4 + 2*D[4]*Ts*e_tau3 + 4*Q[3]*Ts*e_tau3 + 4*Q[3]*Tsq3*e_tau + D[4]*Tsq*e_tau2 + 6*Q[3]*Tsq*e_tau2 + 2*D[21]*Tsq*u1*e_tau2 - 2*D[21]*Tsq*u1_in*e_tau2 + D[27]*Tsq*(u1*u1)*e_tau2 + D[27]*Tsq*(u1_in*u1_in)*e_tau2 + 2*D[21]*Ts*u1*e_tau3 - 2*D[21]*Ts*u1_in*e_tau3 - 2*D[27]*Tsq*u1*u1_in*e_tau2)/Ts_e_tau4;
-	P[5] = (D[5]*e_tau2 + D[5]*Ts*e_tau + D[6]*Ts*(e_b2*e_tau2) - D[46]*Ts*(e_b2*e_tau2) + D[6]*Tsq*(e_b2*e_tau) - D[46]*Tsq*(e_b2*e_tau) + D[19]*Ts*u2*e_tau - D[19]*Ts*u2_in*e_tau - D[13]*Ts*bias2*(e_b2*e_tau2) - D[13]*Tsq*bias2*(e_b2*e_tau) + D[13]*Ts*u2*(e_b2*e_tau2) + D[13]*Tsq*u2*(e_b2*e_tau) + D[22]*Tsq*u2*(e_b2*e_tau) - D[48]*Tsq*u2*(e_b2*e_tau) - D[22]*Tsq*u2_in*(e_b2*e_tau) + D[48]*Tsq*u2_in*(e_b2*e_tau) + D[25]*Tsq*(u2*u2)*(e_b2*e_tau) - D[25]*Tsq*bias2*u2*(e_b2*e_tau) + D[25]*Tsq*bias2*u2_in*(e_b2*e_tau) - D[25]*Tsq*u2*u2_in*(e_b2*e_tau))/Ts_e_tau2;
-	P[6] = (Q[4]*Tsq4 + D[6]*e_tau4 + Q[4]*e_tau4 + 2*D[6]*Ts*e_tau3 + 4*Q[4]*Ts*e_tau3 + 4*Q[4]*Tsq3*e_tau + D[6]*Tsq*e_tau2 + 6*Q[4]*Tsq*e_tau2 + 2*D[22]*Tsq*u2*e_tau2 - 2*D[22]*Tsq*u2_in*e_tau2 + D[27]*Tsq*(u2*u2)*e_tau2 + D[27]*Tsq*(u2_in*u2_in)*e_tau2 + 2*D[22]*Ts*u2*e_tau3 - 2*D[22]*Ts*u2_in*e_tau3 - 2*D[27]*Tsq*u2*u2_in*e_tau2)/Ts_e_tau4;
-	P[7] = (D[7]*e_tauy2 + D[7]*Ts*e_tauy + D[8]*Ts*(e_b3*e_tauy2) - D[52]*Ts*(e_b3*e_tauy2) + D[8]*Tsq*(e_b3*e_tauy) - D[52]*Tsq*(e_b3*e_tauy) + D[30]*Ts*u3*e_tauy - D[30]*Ts*u3_in*e_tauy - D[16]*Ts*bias3*(e_b3*e_tauy2) - D[16]*Tsq*bias3*(e_b3*e_tauy) + D[16]*Ts*u3*(e_b3*e_tauy2) + D[16]*Tsq*u3*(e_b3*e_tauy) + D[33]*Tsq*u3*(e_b3*e_tauy) - D[55]*Tsq*u3*(e_b3*e_tauy) - D[33]*Tsq*u3_in*(e_b3*e_tauy) + D[55]*Tsq*u3_in*(e_b3*e_tauy) + D[36]*Tsq*(u3*u3)*(e_b3*e_tauy) - D[36]*Tsq*bias3*u3*(e_b3*e_tauy) + D[36]*Tsq*bias3*u3_in*(e_b3*e_tauy) - D[36]*Tsq*u3*u3_in*(e_b3*e_tauy))/Ts_e_tauy2;
-	P[8] = (Q[5]*Tsq4 + D[8]*e_tauy4 + Q[5]*e_tauy4 + 2*D[8]*Ts*e_tauy3 + 4*Q[5]*Ts*e_tauy3 + 4*Q[5]*Tsq3*e_tauy + D[8]*Tsq*e_tauy2 + 6*Q[5]*Tsq*e_tauy2 + 2*D[33]*Tsq*u3*e_tauy2 - 2*D[33]*Tsq*u3_in*e_tauy2 + D[38]*Tsq*(u3*u3)*e_tauy2 + D[38]*Tsq*(u3_in*u3_in)*e_tauy2 + 2*D[33]*Ts*u3*e_tauy3 - 2*D[33]*Ts*u3_in*e_tauy3 - 2*D[38]*Tsq*u3*u3_in*e_tauy2)/Ts_e_tauy4;
-	P[9] = D[9] - Ts*(D[41]*e_b1 - D[10]*e_b1 + D[11]*e_b1*(bias1 - u1));
-	P[10] = (e_tau*(D[10]*Ts + D[10]*e_tau + D[24]*Ts*u1 - D[24]*Ts*u1_in))/Ts_e_tau2;
+	P[0] = D[0] + Q[0] + 2*Ts*e_b1*(D[3] - D[29] - D[9]*bias1 + D[9]*u1) + Tsq*(e_b1*e_b1)*(D[4] - 2*D[30] + D[33] - 2*D[10]*bias1 + 2*D[31]*bias1 + 2*D[10]*u1 - 2*D[31]*u1 + D[11]*(bias1*bias1) + D[11]*(u1*u1) - 2*D[11]*bias1*u1);
+	P[1] = D[1] + Q[1] + 2*Ts*e_b2*(D[5] - D[34] - D[12]*bias2 + D[12]*u2) + Tsq*(e_b2*e_b2)*(D[6] - 2*D[35] + D[38] - 2*D[13]*bias2 + 2*D[36]*bias2 + 2*D[13]*u2 - 2*D[36]*u2 + D[14]*(bias2*bias2) + D[14]*(u2*u2) - 2*D[14]*bias2*u2);
+	P[2] = D[2] + Q[2] + 2*Ts*e_b3*(D[7] - D[39] - D[15]*bias3 + D[15]*u3) + Tsq*(e_b3*e_b3)*(D[8] - 2*D[40] + D[43] - 2*D[16]*bias3 + 2*D[41]*bias3 + 2*D[16]*u3 - 2*D[41]*u3 + D[17]*(bias3*bias3) + D[17]*(u3*u3) - 2*D[17]*bias3*u3);
+	P[3] = (D[3]*e_tau2 + D[3]*Ts*e_tau + D[4]*Ts*(e_b1*e_tau2) - D[30]*Ts*(e_b1*e_tau2) + D[4]*Tsq*(e_b1*e_tau) - D[30]*Tsq*(e_b1*e_tau) + D[18]*Ts*u1*e_tau - D[18]*Ts*u1_in*e_tau - D[10]*Ts*bias1*(e_b1*e_tau2) - D[10]*Tsq*bias1*(e_b1*e_tau) + D[10]*Ts*u1*(e_b1*e_tau2) + D[10]*Tsq*u1*(e_b1*e_tau) + D[20]*Tsq*u1*(e_b1*e_tau) - D[32]*Tsq*u1*(e_b1*e_tau) - D[20]*Tsq*u1_in*(e_b1*e_tau) + D[32]*Tsq*u1_in*(e_b1*e_tau) + D[22]*Tsq*(u1*u1)*(e_b1*e_tau) - D[22]*Tsq*bias1*u1*(e_b1*e_tau) + D[22]*Tsq*bias1*u1_in*(e_b1*e_tau) - D[22]*Tsq*u1*u1_in*(e_b1*e_tau))/Ts_e_tau2;
+	P[4] = (Q[3]*Tsq4 + D[4]*e_tau4 + Q[3]*e_tau4 + 2*D[4]*Ts*e_tau3 + 4*Q[3]*Ts*e_tau3 + 4*Q[3]*Tsq3*e_tau + D[4]*Tsq*e_tau2 + 6*Q[3]*Tsq*e_tau2 + 2*D[20]*Tsq*u1*e_tau2 - 2*D[20]*Tsq*u1_in*e_tau2 + D[24]*Tsq*(u1*u1)*e_tau2 + D[24]*Tsq*(u1_in*u1_in)*e_tau2 + 2*D[20]*Ts*u1*e_tau3 - 2*D[20]*Ts*u1_in*e_tau3 - 2*D[24]*Tsq*u1*u1_in*e_tau2)/Ts_e_tau4;
+	P[5] = (D[5]*e_tau2 + D[5]*Ts*e_tau + D[6]*Ts*(e_b2*e_tau2) - D[35]*Ts*(e_b2*e_tau2) + D[6]*Tsq*(e_b2*e_tau) - D[35]*Tsq*(e_b2*e_tau) + D[19]*Ts*u2*e_tau - D[19]*Ts*u2_in*e_tau - D[13]*Ts*bias2*(e_b2*e_tau2) - D[13]*Tsq*bias2*(e_b2*e_tau) + D[13]*Ts*u2*(e_b2*e_tau2) + D[13]*Tsq*u2*(e_b2*e_tau) + D[21]*Tsq*u2*(e_b2*e_tau) - D[37]*Tsq*u2*(e_b2*e_tau) - D[21]*Tsq*u2_in*(e_b2*e_tau) + D[37]*Tsq*u2_in*(e_b2*e_tau) + D[23]*Tsq*(u2*u2)*(e_b2*e_tau) - D[23]*Tsq*bias2*u2*(e_b2*e_tau) + D[23]*Tsq*bias2*u2_in*(e_b2*e_tau) - D[23]*Tsq*u2*u2_in*(e_b2*e_tau))/Ts_e_tau2;
+	P[6] = (Q[4]*Tsq4 + D[6]*e_tau4 + Q[4]*e_tau4 + 2*D[6]*Ts*e_tau3 + 4*Q[4]*Ts*e_tau3 + 4*Q[4]*Tsq3*e_tau + D[6]*Tsq*e_tau2 + 6*Q[4]*Tsq*e_tau2 + 2*D[21]*Tsq*u2*e_tau2 - 2*D[21]*Tsq*u2_in*e_tau2 + D[24]*Tsq*(u2*u2)*e_tau2 + D[24]*Tsq*(u2_in*u2_in)*e_tau2 + 2*D[21]*Ts*u2*e_tau3 - 2*D[21]*Ts*u2_in*e_tau3 - 2*D[24]*Tsq*u2*u2_in*e_tau2)/Ts_e_tau4;
+	P[7] = (D[7]*e_tauy2 + D[7]*Ts*e_tauy + D[8]*Ts*(e_b3*e_tauy2) - D[40]*Ts*(e_b3*e_tauy2) + D[8]*Tsq*(e_b3*e_tauy) - D[40]*Tsq*(e_b3*e_tauy) + D[25]*Ts*u3*e_tauy - D[25]*Ts*u3_in*e_tauy - D[16]*Ts*bias3*(e_b3*e_tauy2) - D[16]*Tsq*bias3*(e_b3*e_tauy) + D[16]*Ts*u3*(e_b3*e_tauy2) + D[16]*Tsq*u3*(e_b3*e_tauy) + D[26]*Tsq*u3*(e_b3*e_tauy) - D[42]*Tsq*u3*(e_b3*e_tauy) - D[26]*Tsq*u3_in*(e_b3*e_tauy) + D[42]*Tsq*u3_in*(e_b3*e_tauy) + D[27]*Tsq*(u3*u3)*(e_b3*e_tauy) - D[27]*Tsq*bias3*u3*(e_b3*e_tauy) + D[27]*Tsq*bias3*u3_in*(e_b3*e_tauy) - D[27]*Tsq*u3*u3_in*(e_b3*e_tauy))/Ts_e_tauy2;
+	P[8] = (Q[5]*Tsq4 + D[8]*e_tauy4 + Q[5]*e_tauy4 + 2*D[8]*Ts*e_tauy3 + 4*Q[5]*Ts*e_tauy3 + 4*Q[5]*Tsq3*e_tauy + D[8]*Tsq*e_tauy2 + 6*Q[5]*Tsq*e_tauy2 + 2*D[26]*Tsq*u3*e_tauy2 - 2*D[26]*Tsq*u3_in*e_tauy2 + D[28]*Tsq*(u3*u3)*e_tauy2 + D[28]*Tsq*(u3_in*u3_in)*e_tauy2 + 2*D[26]*Ts*u3*e_tauy3 - 2*D[26]*Ts*u3_in*e_tauy3 - 2*D[28]*Tsq*u3*u3_in*e_tauy2)/Ts_e_tauy4;
+	P[9] = D[9] - Ts*(D[31]*e_b1 - D[10]*e_b1 + D[11]*e_b1*(bias1 - u1));
+	P[10] = (e_tau*(D[10]*Ts + D[10]*e_tau + D[22]*Ts*u1 - D[22]*Ts*u1_in))/Ts_e_tau2;
 	P[11] = D[11] + Q[6];
-	P[12] = D[12] - Ts*(D[47]*e_b2 - D[13]*e_b2 + D[14]*e_b2*(bias2 - u2));
-	P[13] = (e_tau*(D[13]*Ts + D[13]*e_tau + D[25]*Ts*u2 - D[25]*Ts*u2_in))/Ts_e_tau2;
+	P[12] = D[12] - Ts*(D[36]*e_b2 - D[13]*e_b2 + D[14]*e_b2*(bias2 - u2));
+	P[13] = (e_tau*(D[13]*Ts + D[13]*e_tau + D[23]*Ts*u2 - D[23]*Ts*u2_in))/Ts_e_tau2;
 	P[14] = D[14] + Q[7];
-	P[15] = D[15] - Ts*(D[53]*e_b3 - D[16]*e_b3 + D[17]*e_b3*(bias3 - u3));
-	P[16] = (e_tauy*(D[16]*Ts + D[16]*e_tauy + D[36]*Ts*u3 - D[36]*Ts*u3_in))/Ts_e_tauy2;
+	P[15] = D[15] - Ts*(D[41]*e_b3 - D[16]*e_b3 + D[17]*e_b3*(bias3 - u3));
+	P[16] = (e_tauy*(D[16]*Ts + D[16]*e_tauy + D[27]*Ts*u3 - D[27]*Ts*u3_in))/Ts_e_tauy2;
 	P[17] = D[17] + Q[8];
-	P[18] = D[18] - Ts*(D[42]*e_b1 - D[21]*e_b1 + D[24]*e_b1*(bias1 - u1));
-	P[19] = D[19] - Ts*(D[48]*e_b2 - D[22]*e_b2 + D[25]*e_b2*(bias2 - u2));
-	P[20] = D[20] - Ts*(D[54]*e_b3 - D[23]*e_b3 + D[26]*e_b3*(bias3 - u3));
-	P[21] = (e_tau*(D[21]*Ts + D[21]*e_tau + D[27]*Ts*u1 - D[27]*Ts*u1_in))/Ts_e_tau2;
-	P[22] = (e_tau*(D[22]*Ts + D[22]*e_tau + D[27]*Ts*u2 - D[27]*Ts*u2_in))/Ts_e_tau2;
-	P[23] = (e_tauy*(D[23]*Ts + D[23]*e_tauy + D[37]*Ts*u3 - D[37]*Ts*u3_in))/Ts_e_tauy2;
-	P[24] = D[24];
-	P[25] = D[25];
-	P[26] = D[26];
-	P[27] = D[27] + Q[9];
-	P[28] = D[28] - Ts*(D[43]*e_b1 - D[31]*e_b1 + D[34]*e_b1*(bias1 - u1));
-	P[29] = D[29] - Ts*(D[49]*e_b2 - D[32]*e_b2 + D[35]*e_b2*(bias2 - u2));
-	P[30] = D[30] - Ts*(D[55]*e_b3 - D[33]*e_b3 + D[36]*e_b3*(bias3 - u3));
-	P[31] = (e_tau*(D[31]*Ts + D[31]*e_tau + D[37]*Ts*u1 - D[37]*Ts*u1_in))/Ts_e_tau2;
-	P[32] = (e_tau*(D[32]*Ts + D[32]*e_tau + D[37]*Ts*u2 - D[37]*Ts*u2_in))/Ts_e_tau2;
-	P[33] = (e_tauy*(D[33]*Ts + D[33]*e_tauy + D[38]*Ts*u3 - D[38]*Ts*u3_in))/Ts_e_tauy2;
-	P[34] = D[34];
-	P[35] = D[35];
+	P[18] = D[18] - Ts*(D[32]*e_b1 - D[20]*e_b1 + D[22]*e_b1*(bias1 - u1));
+	P[19] = D[19] - Ts*(D[37]*e_b2 - D[21]*e_b2 + D[23]*e_b2*(bias2 - u2));
+	P[20] = (e_tau*(D[20]*Ts + D[20]*e_tau + D[24]*Ts*u1 - D[24]*Ts*u1_in))/Ts_e_tau2;
+	P[21] = (e_tau*(D[21]*Ts + D[21]*e_tau + D[24]*Ts*u2 - D[24]*Ts*u2_in))/Ts_e_tau2;
+	P[22] = D[22];
+	P[23] = D[23];
+	P[24] = D[24] + Q[9];
+	P[25] = D[25] - Ts*(D[42]*e_b3 - D[26]*e_b3 + D[27]*e_b3*(bias3 - u3));
+	P[26] = (e_tauy*(D[26]*Ts + D[26]*e_tauy + D[28]*Ts*u3 - D[28]*Ts*u3_in))/Ts_e_tauy2;
+	P[27] = D[27];
+	P[28] = D[28] + Q[10];
+	P[29] = D[29] - Ts*(D[33]*e_b1 - D[30]*e_b1 + D[31]*e_b1*(bias1 - u1));
+	P[30] = (e_tau*(D[30]*Ts + D[30]*e_tau + D[32]*Ts*u1 - D[32]*Ts*u1_in))/Ts_e_tau2;
+	P[31] = D[31];
+	P[32] = D[32];
+	P[33] = D[33] + Q[11];
+	P[34] = D[34] - Ts*(D[38]*e_b2 - D[35]*e_b2 + D[36]*e_b2*(bias2 - u2));
+	P[35] = (e_tau*(D[35]*Ts + D[35]*e_tau + D[37]*Ts*u2 - D[37]*Ts*u2_in))/Ts_e_tau2;
 	P[36] = D[36];
 	P[37] = D[37];
-	P[38] = D[38] + Q[10];
-	P[39] = D[39] - Ts*(D[44]*e_b1 - D[40]*e_b1 + D[41]*e_b1*(bias1 - u1));
-	P[40] = (e_tau*(D[40]*Ts + D[40]*e_tau + D[42]*Ts*u1 - D[42]*Ts*u1_in))/Ts_e_tau2;
+	P[38] = D[38] + Q[12];
+	P[39] = D[39] - Ts*(D[43]*e_b3 - D[40]*e_b3 + D[41]*e_b3*(bias3 - u3));
+	P[40] = (e_tauy*(D[40]*Ts + D[40]*e_tauy + D[42]*Ts*u3 - D[42]*Ts*u3_in))/Ts_e_tauy2;
 	P[41] = D[41];
 	P[42] = D[42];
-	P[43] = D[43];
-	P[44] = D[44] + Q[11];
-	P[45] = D[45] - Ts*(D[50]*e_b2 - D[46]*e_b2 + D[47]*e_b2*(bias2 - u2));
-	P[46] = (e_tau*(D[46]*Ts + D[46]*e_tau + D[48]*Ts*u2 - D[48]*Ts*u2_in))/Ts_e_tau2;
-	P[47] = D[47];
-	P[48] = D[48];
-	P[49] = D[49];
-	P[50] = D[50] + Q[12];
-	P[51] = D[51] - Ts*(D[56]*e_b3 - D[52]*e_b3 + D[53]*e_b3*(bias3 - u3));
-	P[52] = (e_tauy*(D[52]*Ts + D[52]*e_tauy + D[55]*Ts*u3 - D[55]*Ts*u3_in))/Ts_e_tauy2;
-	P[53] = D[53];
-	P[54] = D[54];
-	P[55] = D[55];
-	P[56] = D[56] + Q[13];
+	P[43] = D[43] + Q[13];
 
     
 	/********* this is the update part of the equation ***********/
@@ -590,11 +577,11 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
 	X[6] = b1 + (P[9]*(gyro_x - w1))/S[0];
 	X[7] = b2 + (P[12]*(gyro_y - w2))/S[1];
 	X[8] = b3 + (P[15]*(gyro_z - w3))/S[2];
-	X[9] = tau + (P[18]*(gyro_x - w1))/S[0] + (P[19]*(gyro_y - w2))/S[1] + (P[20]*(gyro_z - w3))/S[2];
-	X[10] = tauy + (P[28]*(gyro_x - w1))/S[0] + (P[29]*(gyro_y - w2))/S[1] + (P[30]*(gyro_z - w3))/S[2];
-	X[11] = bias1 + (P[39]*(gyro_x - w1))/S[0];
-	X[12] = bias2 + (P[45]*(gyro_y - w2))/S[1];
-	X[13] = bias3 + (P[51]*(gyro_z - w3))/S[2];
+	X[9] = tau + (P[18]*(gyro_x - w1))/S[0] + (P[19]*(gyro_y - w2))/S[1];
+	X[10] = tauy + (P[25]*(gyro_z - w3))/S[2];
+	X[11] = bias1 + (P[29]*(gyro_x - w1))/S[0];
+	X[12] = bias2 + (P[34]*(gyro_y - w2))/S[1];
+	X[13] = bias3 + (P[39]*(gyro_z - w3))/S[2];
 
 	// update the duplicate cache
 	for (uint32_t i = 0; i < AF_NUMP; i++)
@@ -622,43 +609,30 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
 	P[17] = D[17] - D[15]*D[15]/S[2];
 	P[18] = -D[18]*(D[0]/S[0] - 1);
 	P[19] = -D[19]*(D[1]/S[1] - 1);
-	P[20] = -D[20]*(D[2]/S[2] - 1);
-	P[21] = D[21] - (D[3]*D[18])/S[0];
-	P[22] = D[22] - (D[5]*D[19])/S[1];
-	P[23] = D[23] - (D[7]*D[20])/S[2];
-	P[24] = D[24] - (D[9]*D[18])/S[0];
-	P[25] = D[25] - (D[12]*D[19])/S[1];
-	P[26] = D[26] - (D[15]*D[20])/S[2];
-	P[27] = D[27] - D[18]*D[18]/S[0] - D[19]*D[19]/S[1] - D[20]*D[20]/S[2];
-	P[28] = -D[28]*(D[0]/S[0] - 1);
-	P[29] = -D[29]*(D[1]/S[1] - 1);
-	P[30] = -D[30]*(D[2]/S[2] - 1);
-	P[31] = D[31] - (D[3]*D[28])/S[0];
-	P[32] = D[32] - (D[5]*D[29])/S[1];
-	P[33] = D[33] - (D[7]*D[30])/S[2];
-	P[34] = D[34] - (D[9]*D[28])/S[0];
-	P[35] = D[35] - (D[12]*D[29])/S[1];
-	P[36] = D[36] - (D[15]*D[30])/S[2];
-	P[37] = D[37] - (D[18]*D[28])/S[0] - (D[19]*D[29])/S[1] - (D[20]*D[30])/S[2];
-	P[38] = D[38] - D[28]*D[28]/S[0] - D[29]*D[29]/S[1] - D[30]*D[30]/S[2];
-	P[39] = -D[39]*(D[0]/S[0] - 1);
-	P[40] = D[40] - (D[3]*D[39])/S[0];
-	P[41] = D[41] - (D[9]*D[39])/S[0];
-	P[42] = D[42] - (D[18]*D[39])/S[0];
-	P[43] = D[43] - (D[28]*D[39])/S[0];
-	P[44] = D[44] - D[39]*D[39]/S[0];
-	P[45] = -D[45]*(D[1]/S[1] - 1);
-	P[46] = D[46] - (D[5]*D[45])/S[1];
-	P[47] = D[47] - (D[12]*D[45])/S[1];
-	P[48] = D[48] - (D[19]*D[45])/S[1];
-	P[49] = D[49] - (D[29]*D[45])/S[1];
-	P[50] = D[50] - D[45]*D[45]/S[1];
-	P[51] = -D[51]*(D[2]/S[2] - 1);
-	P[52] = D[52] - (D[7]*D[51])/S[2];
-	P[53] = D[53] - (D[15]*D[51])/S[2];
-	P[54] = D[54] - (D[20]*D[51])/S[2];
-	P[55] = D[55] - (D[30]*D[51])/S[2];
-	P[56] = D[56] - D[51]*D[51]/S[2];
+	P[20] = D[20] - (D[3]*D[18])/S[0];
+	P[21] = D[21] - (D[5]*D[19])/S[1];
+	P[22] = D[22] - (D[9]*D[18])/S[0];
+	P[23] = D[23] - (D[12]*D[19])/S[1];
+	P[24] = D[24] - D[18]*D[18]/S[0] - D[19]*D[19]/S[1];
+	P[25] = -D[25]*(D[2]/S[2] - 1);
+	P[26] = D[26] - (D[7]*D[25])/S[2];
+	P[27] = D[27] - (D[15]*D[25])/S[2];
+	P[28] = D[28] - D[25]*D[25]/S[2];
+	P[29] = -D[29]*(D[0]/S[0] - 1);
+	P[30] = D[30] - (D[3]*D[29])/S[0];
+	P[31] = D[31] - (D[9]*D[29])/S[0];
+	P[32] = D[32] - (D[18]*D[29])/S[0];
+	P[33] = D[33] - D[29]*D[29]/S[0];
+	P[34] = -D[34]*(D[1]/S[1] - 1);
+	P[35] = D[35] - (D[5]*D[34])/S[1];
+	P[36] = D[36] - (D[12]*D[34])/S[1];
+	P[37] = D[37] - (D[19]*D[34])/S[1];
+	P[38] = D[38] - D[34]*D[34]/S[1];
+	P[39] = -D[39]*(D[2]/S[2] - 1);
+	P[40] = D[40] - (D[7]*D[39])/S[2];
+	P[41] = D[41] - (D[15]*D[39])/S[2];
+	P[42] = D[42] - (D[25]*D[39])/S[2];
+	P[43] = D[43] - D[39]*D[39]/S[2];
 
 
 	// apply limits to some of the state variables
@@ -731,39 +705,26 @@ static void af_init(float X[AF_NUMX], float P[AF_NUMP])
 	P[21] = 0.0f;
 	P[22] = 0.0f;
 	P[23] = 0.0f;
-	P[24] = 0.0f;
+	P[24] = q_init[9];
 	P[25] = 0.0f;
 	P[26] = 0.0f;
-	P[27] = q_init[9];
-	P[28] = 0.0f;
+	P[27] = 0.0f;
+	P[28] = q_init[10];
 	P[29] = 0.0f;
 	P[30] = 0.0f;
 	P[31] = 0.0f;
 	P[32] = 0.0f;
-	P[33] = 0.0f;
+	P[33] = q_init[11];
 	P[34] = 0.0f;
 	P[35] = 0.0f;
 	P[36] = 0.0f;
 	P[37] = 0.0f;
-	P[38] = q_init[10];
+	P[38] = q_init[12];
 	P[39] = 0.0f;
 	P[40] = 0.0f;
 	P[41] = 0.0f;
 	P[42] = 0.0f;
-	P[43] = 0.0f;
-	P[44] = q_init[11];
-	P[45] = 0.0f;
-	P[46] = 0.0f;
-	P[47] = 0.0f;
-	P[48] = 0.0f;
-	P[49] = 0.0f;
-	P[50] = q_init[12];
-	P[51] = 0.0f;
-	P[52] = 0.0f;
-	P[53] = 0.0f;
-	P[54] = 0.0f;
-	P[55] = 0.0f;
-	P[56] = q_init[13];
+	P[43] = q_init[13];
 }
 
 /**

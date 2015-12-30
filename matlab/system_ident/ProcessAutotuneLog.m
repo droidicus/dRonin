@@ -32,7 +32,7 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
   
   %get data from log file
   LogConvert(fileStr, true);
-  LogData = load([fileStr(1:end-3) 'mat']);
+  LogData = load([fileStr(1:end-5) 'mat']);
   
   if makeGraphs
     %make some pretty pictures
@@ -47,6 +47,8 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
     title('Beta');
     figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), 1000*exp(LogData.SystemIdent.Tau(10:end-1)));
     title('Tau (ms)');
+    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), 1000*exp(LogData.SystemIdent.Tauy(10:end-1)));
+    title('Tauy (ms)');
   end
   
   %default values
@@ -60,6 +62,9 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
   Pitchki = zeros(1,numSIPoints);
   Pitchkp = zeros(1,numSIPoints);
   Pitchkd = zeros(1,numSIPoints);
+  Yawki = zeros(1,numSIPoints);
+  Yawkp = zeros(1,numSIPoints);
+  Yawkd = zeros(1,numSIPoints);
   DerivativeCutoff = zeros(1,numSIPoints);
   NaturalFrequency = zeros(1,numSIPoints);
   
@@ -106,11 +111,6 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
     Pitchki(ii) = a * b * wn * wn * tau * tau_d / beta;
     Pitchkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Pitchki(ii)*tau_d);
     Pitchkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Pitchkp(ii) * tau_d);
-    
-    beta = exp(LogData.SystemIdent.Beta(Roll, ii));
-    Rollki(ii) = a * b * wn * wn * tau * tau_d / beta;
-    Rollkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Rollki(ii)*tau_d);
-    Rollkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Rollkp(ii) * tau_d);
 
     beta = exp(LogData.SystemIdent.Beta(Yaw, ii));
     Yawki(ii) = a * b * wn * wn * tau * tau_d / beta;
@@ -140,55 +140,140 @@ function [] = ProcessAutotuneLog(fileStr, makeGraphs)
     legend('Yawki', 'Yawkp', 'Yawkd');
   end
   
-  % Recreate the X vector
-  X = [LogData.SystemIdent.X; LogData.SystemIdent.Beta; LogData.SystemIdent.Tau; LogData.SystemIdent.Bias];
+%  % Recreate the X vector
+%  X = [LogData.SystemIdent.X; LogData.SystemIdent.Beta; LogData.SystemIdent.Tau; LogData.SystemIdent.Bias];
+%  
+%  % Covariance trace figure of merrit
+%  traceFOMRaw = sum(LogData.SystemIdent.CovarianceMatrix,1);
+%  % Covariance trace with each element scaled by the value of the variences at 30seconds in
+%  traceFOMScaled = sum(LogData.SystemIdent.CovarianceMatrix ./ LogData.SystemIdent.CovarianceMatrix(:,round(end/2)),1);
+%  %
+%  traceFOMIndexOfDispersion = sum(LogData.SystemIdent.CovarianceMatrix ./ mean(abs(X),2),1);
+%  %
+%  traceFOMCoefficientOfVariation = sum(sqrt(LogData.SystemIdent.CovarianceMatrix) ./ mean(abs(X),2),1);
+%  % select which FOM to use
+%  traceFOM = traceFOMRaw;
+%  
+%  if makeGraphs
+%    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), traceFOM(10:end-1));
+%    title('tr(P)');
+%  end
   
-  % Covariance trace figure of merrit
-  traceFOMRaw = sum(LogData.SystemIdent.CovarianceMatrix,1);
-  % Covariance trace with each element scaled by the value of the variences at 30seconds in
-  traceFOMScaled = sum(LogData.SystemIdent.CovarianceMatrix ./ LogData.SystemIdent.CovarianceMatrix(:,round(end/2)),1);
-  %
-  traceFOMIndexOfDispersion = sum(LogData.SystemIdent.CovarianceMatrix ./ mean(abs(X),2),1);
-  %
-  traceFOMCoefficientOfVariation = sum(sqrt(LogData.SystemIdent.CovarianceMatrix) ./ mean(abs(X),2),1);
-  % select which FOM to use
-  traceFOM = traceFOMRaw;
+%  % find the best trace in the second half of the tuning run, exclude any data points where NumAfPredicts is zero (invalid data)
+%  [convValue convPoint] = min(traceFOM(end/2:end) + 1000*(!LogData.SystemIdent.NumAfPredicts(end/2:end)));
+%  convPoint = round(convPoint + size(traceFOM,2)/2 - 1);
   
-  if makeGraphs
-    figure; plot(LogData.SystemIdent.NumAfPredicts(10:end-1), traceFOM(10:end-1));
-    title('tr(P)');
-  end
-  
-  % find the best trace in the second half of the tuning run, exclude any data points where NumAfPredicts is zero (invalid data)
-  [convValue convPoint] = min(traceFOM(end/2:end) + 1000*(!LogData.SystemIdent.NumAfPredicts(end/2:end)));
-  convPoint = round(convPoint + size(traceFOM,2)/2 - 1);
+  % find the last valid point in the tuning run
+  convPoint = find(LogData.SystemIdent.NumAfPredicts);
+  convPoint = convPoint(end);
   
   printf('\n\n**********************************************\n');
   printf('*************** Output Results ***************\n');
   printf('**********************************************\n');
   
-  printf('\nMinimum Tr(P) value in last half: %f\n', convValue);
-  printf('Minimum Tr(P) location in last half: %f\n', convPoint);
-  printf('Minimum Tr(P) NumAfPredicts in last half: %f\n', LogData.SystemIdent.NumAfPredicts(convPoint));
+%  printf('\nMinimum Tr(P) value in last half: %f\n', convValue);
+  printf('\nValid Point location in last half: %f\n', convPoint);
+  printf('Valid Point NumAfPredicts in last half: %f\n', LogData.SystemIdent.NumAfPredicts(convPoint));
   
   % print data and converged PID values
   printf('Achieved Tau (ms): %f\n', 1000*exp(LogData.SystemIdent.Tau(convPoint)));
   
-  printf('\nOptimal Roll Kp: %f\n', Rollkp(convPoint));
-  printf('Optimal Roll Ki: %f\n', Rollki(convPoint));
-  printf('Optimal Roll Kd: %f\n', Rollkd(convPoint));
+  printf('\nRoll Kp: %f\n', Rollkp(convPoint));
+  printf('Roll Ki: %f\n', Rollki(convPoint));
+  printf('Roll Kd: %f\n', Rollkd(convPoint));
   
-  printf('\nOptimal Pitch Kp: %f\n', Pitchkp(convPoint));
-  printf('Optimal Pitch Ki: %f\n', Pitchki(convPoint));
-  printf('Optimal Pitch Kd: %f\n', Pitchkd(convPoint));
+  printf('\nPitch Kp: %f\n', Pitchkp(convPoint));
+  printf('Pitch Ki: %f\n', Pitchki(convPoint));
+  printf('Pitch Kd: %f\n', Pitchkd(convPoint));
   
-  % Results for the yaw PID values are not proven yet, results seem to be similar to Fujotuning for some flight configurations
+  % Results for the yaw PID values are not proven yet
   printf('\nvvv DONT USE THESE YAW VALUES UNLESS YOU KNOW YOU WANT TO!! vvv');
-  printf('\nOptimal Yaw Kp: %f\n', Yawkp(convPoint));
-  printf('Optimal Yaw Ki: %f\n', Yawki(convPoint));
-  printf('Optimal Yaw Kd: %f\n', Yawkd(convPoint));
+  printf('\nYaw Kp: %f\n', Yawkp(convPoint));
+  printf('Yaw Ki: %f\n', Yawki(convPoint));
+  printf('Yaw Kd: %f\n', Yawkd(convPoint));
   printf('^^^ DONT USE THESE YAW VALUES UNLESS YOU KNOW YOU WANT TO!! ^^^\n');
-  % Results for the yaw PID values are not proven yet, results seem to be similar to Fujotuning for some flight configurations
+  % Results for the yaw PID values are not proven yet
   
   printf('\nOuter Kp: %f\n', kp_o(convPoint));
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  numSIPoints = size(LogData.SystemIdent.NumAfPredicts,2);
+  Yawki = zeros(1,numSIPoints);
+  Yawkp = zeros(1,numSIPoints);
+  Yawkd = zeros(1,numSIPoints);
+  DerivativeCutoff = zeros(1,numSIPoints);
+  NaturalFrequency = zeros(1,numSIPoints);
+  
+  % get resulting PID values at each point in the logged data
+  for ii=1:numSIPoints
+    tau = exp(LogData.SystemIdent.Tauy(ii)); %2*exp(LogData.SystemIdent.Tau(ii)) + 0.010; % estimate yaw_tau as (2*tau + 10ms)
+    beta_yaw = LogData.SystemIdent.Beta(Yaw,ii);
+
+    wn = 1/tau;
+    tau_d = 0;
+    for jj=1:30
+      tau_d = (2*damp*tau*wn - 1)/(4*tau*damp*damp*wn*wn - 2*damp*wn - tau*wn*wn + exp(beta_yaw)*ghf);
+      wn = (tau + tau_d) / (tau*tau_d) / (2 * damp + 2);
+    end
+
+%    // Set the real pole position. The first pole is quite slow, which
+%    // prevents the integral being too snappy and driving too much
+%    // overshoot.
+    a = ((tau+tau_d) / tau / tau_d - 2 * damp * wn) / 20.0;
+    b = ((tau+tau_d) / tau / tau_d - 2 * damp * wn - a);
+
+%    // Calculate the gain for the outer loop by approximating the
+%    // inner loop as a single order lpf. Set the outer loop to be
+%    // critically damped;
+    zeta_o = 1.3;
+    kp_o(ii) = 1 / 4.0 / (zeta_o * zeta_o) / (1/wn);
+
+    beta = exp(LogData.SystemIdent.Beta(Yaw, ii));
+    Yawki(ii) = a * b * wn * wn * tau * tau_d / beta;
+    Yawkp(ii) = (tau * tau_d * ((a+b)*wn*wn + 2*a*b*damp*wn) / beta) - (Yawki(ii)*tau_d);
+    Yawkd(ii) = (tau * tau_d * (a*b + wn*wn + (a+b)*2*damp*wn) - 1) / beta - (Yawkp(ii) * tau_d);
+
+    DerivativeCutoff(ii) = 1 / (2*pi*tau_d);
+    NaturalFrequency(ii) = wn / 2 / pi;
+  end
+  
+  if makeGraphs
+    %make more pretty pictures
+    figure; plot(LogData.SystemIdent.NumAfPredicts(1:end-1), [Yawki(1:end-1); Yawkp(1:end-1); Yawkd(1:end-1)]');
+    title('Estimated Yaw PID Values');
+    legend('Yawki', 'Yawkp', 'Yawkd');
+  end
+  
+  % Results for the yaw PID values are not proven yet
+  printf('\nvvv Using estimated Yaw Tau vvv');
+  printf('\nYaw Kp: %f\n', Yawkp(convPoint));
+  printf('Yaw Ki: %f\n', Yawki(convPoint));
+  printf('Yaw Kd: %f\n', Yawkd(convPoint));
+  printf('Yaw Outer Kp: %f\n', kp_o(convPoint));
+  printf('^^^ Using estimated Yaw Tau ^^^\n');
+  % Results for the yaw PID values are not proven yet
+  
+  %save PIDExport.mat -v7 Rollki Rollkp Rollkd Pitchki Pitchkp Pitchkd Yawki Yawkp Yawkd

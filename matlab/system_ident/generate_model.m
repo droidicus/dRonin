@@ -107,9 +107,10 @@ P_1_1 P_1_2 P_1_3 P_1_4 P_1_5 P_1_6 P_1_7 P_1_8 P_1_9 P_1_10 P_1_11 P_1_12 P_1_1
 0     0     0     0     0     0     0     0     0     0       0       0       0       P_14_14  ];
 
 % remove cross coupling terms in the covariance
-P([1 4 7 12],[2 3 5 6 8 9 13 14]) = 0;
-P([2 5 8 13],[1 3 4 6 7 9 12 14]) = 0;
-P([3 6 9 14],[1 2 4 5 7 8 12 13]) = 0;
+P([1 4 7 12],[2 3 5 6 8 9 11 13 14]) = 0;
+P([2 5 8 13],[1 3 4 6 7 9 11 12 14]) = 0;
+P([3 6 9 11 14],[1 2 4 5 7 8 10 12 13]) = 0;
+P([10],[3 6 9 11 14]) = 0;
 
 % we can use this variable to reduce the unused terms out of the equations
 % below instead of storing all of the P values.
@@ -140,9 +141,9 @@ K = P*H'/S;
 
 % go ahead and zero out gains across axes to reduce number
 % of calculations
-K([2 3 5 6 8 9 13 14],1) = 0;
-K([1 3 4 6 7 9 12 14],2) = 0;
-K([1 2 4 5 7 8 12 13],3) = 0;
+K([2 3 5 6 8 9 11 13 14],1) = 0;
+K([1 3 4 6 7 9 11 12 14],2) = 0;
+K([1 2 4 5 7 8 10 12 13],3) = 0;
 
 x_new = x + K*y;
 
@@ -222,7 +223,7 @@ for Pnew = {P2, P3}
                 Pstrings{i,j} = strrep(Pstrings{i,j},'exp(b2 + 2*tauy)','(e_b2*e_tauy2)');
                 Pstrings{i,j} = strrep(Pstrings{i,j},'exp(b3 + 2*tauy)','(e_b3*e_tauy2)');
                 
-                for n1 = 13:-1:1
+                for n1 = N:-1:1
                     Pstrings{i,j} = strrep(Pstrings{i,j},sprintf('Q_%d',n1),sprintf('Q[%d]', n1-1));
                     Pstrings{i,j} = strrep(Pstrings{i,j},sprintf('S_%d',n1),sprintf('S[%d]', n1-1));
                 end
@@ -342,7 +343,7 @@ for j = 1:length(P_idx)
     [k, l] = ind2sub([N N], P_idx(j));
     
     if k == l
-        s_out = sprintf('P[%d] = q_init[%d];',j-1, k);
+        s_out = sprintf('P[%d] = q_init[%d];',j-1, k-1);
     else
         s_out = sprintf('P[%d] = 0.0f;',j-1);
     end
