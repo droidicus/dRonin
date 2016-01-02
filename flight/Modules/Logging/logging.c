@@ -65,12 +65,12 @@
 #include "waypointactive.h"
 
 // Private constants
-#define STACK_SIZE_BYTES 1200
+#define STACK_SIZE_BYTES 5200
 #define TASK_PRIORITY PIOS_THREAD_PRIO_LOW
 const char DIGITS[16] = "0123456789abcdef";
 
 #define LOGGING_PERIOD_MS 10
-#define LOGGING_QUEUE_SIZE 64
+#define LOGGING_QUEUE_SIZE 256
 
 // Private types
 
