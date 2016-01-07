@@ -78,6 +78,10 @@
 #define COORDINATED_FLIGHT_MIN_ROLL_THRESHOLD 3.0f
 #define COORDINATED_FLIGHT_MAX_YAW_THRESHOLD 0.05f
 
+//#define MLS_POLY 0x0108 // Polynomial for the MLS generator
+//#define MLS_INIT 0x0001 // Initial value for MLS generator
+//#define MLS_MAX_VALUE 511
+
 //! Set the stick position that maximally transitions to rate
 // This value is also used for the expo plot in GCS (config/stabilization/advanced).
 // Please adapt changes here also to the init of the plots  in /ground/gcs/src/plugins/config/configstabilizationwidget.cpp
@@ -122,11 +126,36 @@ struct pid pids[PID_MAX];
 
 volatile bool gyro_filter_updated = false;
 
+#define MLS_LENGTH 511
+const int8_t mlsSeq[MLS_LENGTH] =
+{-1, -1, -1, 1, 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1,
+1, -1, 1, 1, 1, 1, -1, 1, -1, -1, -1, -1, 1, 1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, -1,
+-1, 1, -1, -1, -1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, 1, 1, 1, 1, -1, -1, 1, -1, -1, 1,
+-1, 1, 1, 1, -1, -1, 1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, -1,
+-1, 1, 1, 1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, -1, -1, -1, -1, -1, -1, 1, -1, 1, -1, 1,
+-1, 1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1, 1, 1, -1, 1, 1,
+1, -1, 1, 1, -1, 1, 1, -1, 1, -1, 1, 1, -1, -1, -1, -1, -1, 1, -1, 1, 1, 1, -1, 1, 1,
+1, 1, 1, -1, -1, -1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, -1, 1, 1, -1, 1, -1, 1, 1,
+1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, 1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1,
+-1, 1, 1, -1, -1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, -1, 1, 1, -1, -1, -1, -1, -1, -1, -1,
+1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, 1,
+-1, 1, 1, -1, 1, -1, -1, 1, -1, -1, 1, -1, -1, 1, 1, -1, 1, 1, 1, 1, 1, 1, -1, -1, 1,
+-1, 1, 1, -1, 1, -1, 1, -1, -1, -1, -1, 1, -1, 1, -1, -1, -1, 1, -1, -1, 1, 1, 1, -1, 1,
+1, -1, -1, 1, -1, 1, 1, 1, 1, -1, 1, 1, -1, -1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1, -1,
+-1, 1, 1, 1, -1, -1, 1, -1, -1, -1, -1, 1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, -1,
+-1, -1, -1, -1, -1, 1, -1, -1, -1, 1, -1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1,
+1, -1, 1, -1, 1, 1, -1, 1, 1, -1, -1, -1, 1, 1, 1, -1, -1, -1, 1, -1, -1, 1, -1, 1, -1,
+1, -1, -1, -1, 1, 1, -1, 1, 1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, -1, -1, -1,
+1, -1, 1, 1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, 1, -1, -1, -1, -1, -1, 1, -1, -1, 1,
+1, -1, -1, 1, 1, 1, -1, 1, -1, -1, -1, 1, 1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, -1, -1,
+-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1 };
+
 // Private functions
 static void stabilizationTask(void* parameters);
 static void zero_pids(void);
 static void calculate_pids(void);
 static void SettingsUpdatedCb(UAVObjEvent * objEv, void *ctx, void *obj, int len);
+//static uint16_t MLSUpdate(uint16_t * lfsr);
 
 /**
  * Module initialization
@@ -199,8 +228,6 @@ static void stabilizationTask(void* parameters)
 	
 	// Settings for system identification
 	uint32_t iteration = 0;
-	const uint32_t SYSTEM_IDENT_PERIOD = 75;
-	uint32_t system_ident_timeval = PIOS_DELAY_GetRaw();
 
 	float dT_filtered = 0;
 
@@ -533,76 +560,49 @@ static void stabilizationTask(void* parameters)
 				}
 					break;
 				case STABILIZATIONDESIRED_STABILIZATIONMODE_SYSTEMIDENT:
+//					static uint16_t lfsr[3] = {MLS_INIT, MLS_INIT, MLS_INIT};
+
+					if(reinit) {
+						pids[PID_GROUP_ATT + i].iAccumulator = 0;
+						pids[PID_GROUP_RATE + i].iAccumulator = 0;
+
+//						lfsr[i] = MLS_INIT;
+//
+//						for(uint16_t j=0; j < i*MLS_MAX_VALUE/3; j++) {
+//							MLSUpdate( (uint16_t*) &lfsr[i] ); //progress the MLS through 1/3 of the length
+//						}
+					}
+
 					if(reinit) {
 						pids[PID_GROUP_ATT + i].iAccumulator = 0;
 						pids[PID_GROUP_RATE + i].iAccumulator = 0;
 					}
 
-					static uint32_t ident_iteration = 0;
-					static float ident_offsets[3] = {0};
+					SystemIdentData systemIdent;
+					SystemIdentGet(&systemIdent);
 
-					if (PIOS_DELAY_DiffuS(system_ident_timeval) / 1000.0f > SYSTEM_IDENT_PERIOD && SystemIdentHandle()) {
-						ident_iteration++;
-						system_ident_timeval = PIOS_DELAY_GetRaw();
-
-						SystemIdentData systemIdent;
-						SystemIdentGet(&systemIdent);
-
-						const float SCALE_BIAS = 7.1f;
-						float roll_scale = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_ROLL]);
-						float pitch_scale = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_PITCH]);
-						float yaw_scale = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_YAW]);
-
-						if (roll_scale > 0.25f)
-							roll_scale = 0.25f;
-						if (pitch_scale > 0.25f)
-							pitch_scale = 0.25f;
-						if (yaw_scale > 0.25f)
-							yaw_scale = 0.25f;
-
-						switch(ident_iteration & 0x07) {
-							case 0:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = yaw_scale;
-								break;
-							case 1:
-								ident_offsets[0] = roll_scale;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = 0;
-								break;
-							case 2:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = -yaw_scale;
-								break;
-							case 3:
-								ident_offsets[0] = -roll_scale;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = 0;
-								break;
-							case 4:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = yaw_scale;
-								break;
-							case 5:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = pitch_scale;
-								ident_offsets[2] = 0;
-								break;
-							case 6:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = -yaw_scale;
-								break;
-							case 7:
-								ident_offsets[0] = 0;
-								ident_offsets[1] = -pitch_scale;
-								ident_offsets[2] = 0;
-								break;
-						}
+					const float SCALE_BIAS = 7.1f;
+					float ident_offset = 0.0f;
+					if (i == ROLL) {
+						ident_offset = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_ROLL]);
+					} else if (i == PITCH) {
+						ident_offset = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_PITCH]);
+					} else {
+						ident_offset = expf(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_YAW]);
 					}
+
+					if (ident_offset > 0.25f) {
+						ident_offset = 0.25f;
+					}
+
+					ident_offset *= mlsSeq[(iteration/25 + (i*MLS_LENGTH/3)) % MLS_LENGTH];
+
+//					if(MLSUpdate( (uint16_t*) &lfsr[i] )) {
+//						ident_offset = scale;
+//					}
+//					else {
+//						ident_offset = -scale;
+//					}
 
 					if (i == ROLL || i == PITCH) {
 						// Compute the outer loop
@@ -611,7 +611,7 @@ static void stabilizationTask(void* parameters)
 
 						// Compute the inner loop
 						actuatorDesiredAxis[i] = pid_apply_setpoint(&pids[PID_GROUP_RATE + i],  rateDesiredAxis[i],  gyro_filtered[i], dT);
-						actuatorDesiredAxis[i] += ident_offsets[i];
+						actuatorDesiredAxis[i] += ident_offset;
 						actuatorDesiredAxis[i] = bound_sym(actuatorDesiredAxis[i],1.0f);
 					} else {
 						// Get the desired rate. yaw is always in rate mode in system ident.
@@ -619,7 +619,7 @@ static void stabilizationTask(void* parameters)
 
 						// Compute the inner loop only for yaw
 						actuatorDesiredAxis[i] = pid_apply_setpoint(&pids[PID_GROUP_RATE + i],  rateDesiredAxis[i],  gyro_filtered[i], dT);
-						actuatorDesiredAxis[i] += ident_offsets[i];
+						actuatorDesiredAxis[i] += ident_offset;
 						actuatorDesiredAxis[i] = bound_sym(actuatorDesiredAxis[i],1.0f);						
 					}
 
@@ -958,6 +958,18 @@ static void calculate_pids()
 	pid_configure_derivative(settings.DerivativeCutoff, settings.DerivativeGamma);
 
 }
+
+//static uint16_t MLSUpdate(uint16_t * mlsState)
+//{
+//	uint16_t lsb = *mlsState & 1;   /* Get LSB (i.e., the output bit). */
+//	*mlsState >>= 1;                /* Shift register */
+//	*mlsState ^= (-lsb) & MLS_POLY;
+//							   /* If the output bit is 1, apply toggle mask.
+//								* The value has 1 at bits corresponding
+//								* to taps, 0 elsewhere. */
+//
+//	return lsb;
+//}
 
 static void SettingsUpdatedCb(UAVObjEvent * ev, void *ctx, void *obj, int len)
 {
