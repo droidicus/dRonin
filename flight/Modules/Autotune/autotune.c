@@ -59,6 +59,7 @@
 
 #define AF_NUMX 13
 #define AF_NUMP 43
+#define AF_NUMK 15
 
 // Private types
 enum AUTOTUNE_STATE { AT_INIT, AT_START, AT_RUN, AT_FINISHED, AT_WAITING };
@@ -80,7 +81,7 @@ static uint32_t throttle_accumulator;
 
 // Private functions
 static void AutotuneTask(void *parameters);
-static void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in);
+static void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in, float K[AF_NUMK]);
 static void af_init(float X[AF_NUMX], float P[AF_NUMP]);
 
 #ifndef AT_QUEUE_NUMELEM
@@ -178,7 +179,7 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 }
 
 static void UpdateSystemIdent(const float *X, const float *noise,
-		float dT_s, uint32_t predicts, uint32_t spills, float hover_throttle) {
+		float dT_s, uint32_t predicts, uint32_t spills, float hover_throttle, const float *K) {
 	SystemIdentData system_ident;
 	system_ident.Beta[SYSTEMIDENT_BETA_ROLL]    = X[6];
 	system_ident.Beta[SYSTEMIDENT_BETA_PITCH]   = X[7];
@@ -200,6 +201,23 @@ static void UpdateSystemIdent(const float *X, const float *noise,
 
 	system_ident.HoverThrottle = hover_throttle;
 
+	if(K){
+		system_ident.K[0] = K[0];
+		system_ident.K[1] = K[1];
+		system_ident.K[2] = K[2];
+		system_ident.K[3] = K[3];
+		system_ident.K[4] = K[4];
+		system_ident.K[5] = K[5];
+		system_ident.K[6] = K[6];
+		system_ident.K[7] = K[7];
+		system_ident.K[8] = K[8];
+		system_ident.K[9] = K[9];
+		system_ident.K[10] = K[10];
+		system_ident.K[11] = K[11];
+		system_ident.K[12] = K[12];
+		system_ident.K[13] = K[13];
+		system_ident.K[14] = K[14];
+	}
 	SystemIdentSet(&system_ident);
 }
 
@@ -251,6 +269,7 @@ static void AutotuneTask(void *parameters)
 
 	float X[AF_NUMX] = {0};
 	float P[AF_NUMP] = {0};
+	float K[AF_NUMK] = {0};
 	float noise[3] = {0};
 
 	af_init(X,P);
@@ -292,7 +311,7 @@ static void AutotuneTask(void *parameters)
 
 					af_init(X,P);
 
-					UpdateSystemIdent(X, NULL, 0.0f, 0, 0, 0.0f);
+					UpdateSystemIdent(X, NULL, 0.0f, 0, 0, 0.0f, NULL);
 
 					state = AT_START;
 
@@ -361,7 +380,7 @@ static void AutotuneTask(void *parameters)
 
 					last_time = pt->raw_time;
 
-					af_predict(X, P, pt->u, pt->y, dT_s, pt->throttle);
+					af_predict(X, P, pt->u, pt->y, dT_s, pt->throttle, K);
 
 					for (uint32_t i = 0; i < 3; i++) {
 						const float NOISE_ALPHA = 0.9997f;  // 10 second time constant at 300 Hz
@@ -375,7 +394,7 @@ static void AutotuneTask(void *parameters)
 					// telemetry spam
 					if (!((update_counter++) & 0xff)) {
 						float hover_throttle = ((float)(throttle_accumulator/update_counter))/10000.0f;
-						UpdateSystemIdent(X, noise, dT_s, update_counter, at_points_spilled, hover_throttle);
+						UpdateSystemIdent(X, noise, dT_s, update_counter, at_points_spilled, hover_throttle, K);
 					}
 
 					/* Free the buffer containing an AT point */
@@ -394,7 +413,7 @@ static void AutotuneTask(void *parameters)
 				// Wait until disarmed and landed before saving the settings
 
 				float hover_throttle = ((float)(throttle_accumulator/update_counter))/10000.0f;
-				UpdateSystemIdent(X, noise, 0, update_counter, at_points_spilled, hover_throttle);
+				UpdateSystemIdent(X, noise, 0, update_counter, at_points_spilled, hover_throttle, K);
 
 				state = AT_WAITING;	// Fall through
 
@@ -431,7 +450,7 @@ static void AutotuneTask(void *parameters)
  * @param[in] the current control inputs (roll, pitch, yaw)
  * @param[in] the gyro measurements
  */
-__attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in)
+__attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in, float K[AF_NUMK])
 {
 	const float Ts = dT_s;
 	const float Tsq = Ts * Ts;
@@ -479,12 +498,12 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
     // X[6] to X[12] unchanged
 
 	/**** filter parameters ****/
-	const float q_w = 1e-4f;
-	const float q_ud = 1e-4f;
+	const float q_w = 1e-3f;
+	const float q_ud = 1e-3f;
 	const float q_B = 1e-6f;
 	const float q_tau = 1e-6f;
 	const float q_bias = 1e-19f;
-	const float s_a = 15.0f; // expected gyro measurment noise
+	const float s_a = 150.0f; // expected gyro measurment noise
 
 	const float Q[AF_NUMX] = {q_w, q_w, q_w, q_ud, q_ud, q_ud, q_B, q_B, q_B, q_tau, q_bias, q_bias, q_bias};
 
@@ -561,6 +580,22 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
 	X[10] = bias1 + P[28]*((gyro_x - w1)/S[0]);
 	X[11] = bias2 + P[33]*((gyro_y - w2)/S[1]);
 	X[12] = bias3 + P[38]*((gyro_z - w3)/S[2]);
+
+	K[0] = P[0]/S[0];
+	K[1] = P[1]/S[1];
+	K[2] = P[2]/S[2];
+	K[3] = P[3]/S[0];
+	K[4] = P[5]/S[1];
+	K[5] = P[7]/S[2];
+	K[6] = P[9]/S[0];
+	K[7] = P[12]/S[1];
+	K[8] = P[15]/S[2];
+	K[9] = P[18]/S[0];
+	K[11] = P[20]/S[1];
+	K[10] = P[19]/S[2];
+	K[12] = P[28]/S[0];
+	K[13] = P[33]/S[1];
+	K[14] = P[38]/S[2];
 
 	// update the duplicate cache
 	for (uint32_t i = 0; i < AF_NUMP; i++)
