@@ -53,6 +53,7 @@ extern uintptr_t external_i2c_adapter_id;
 #include "opticalflowsettings.h"
 #include "opticalflow.h"
 #include "sensorsettings.h"
+#include "sensortime.h"
 #include "rangefinderdistance.h"
 #include "inssettings.h"
 #include "magnetometer.h"
@@ -78,7 +79,7 @@ static void SensorsTask(void *parameters);
 static void settingsUpdatedCb(UAVObjEvent * objEv, void *ctx, void *obj, int len);
 
 static void update_accels(struct pios_sensor_accel_data *accel);
-static void update_gyros(struct pios_sensor_gyro_data *gyro);
+static void update_gyros(struct pios_sensor_gyro_data *gyro, uint32_t total_ticks, float dT);
 static void update_mags(struct pios_sensor_mag_data *mag);
 static void update_baro(struct pios_sensor_baro_data *baro);
 
@@ -99,6 +100,9 @@ static void updateTemperatureComp(float temperature, float *temp_bias);
 static struct pios_thread *sensorsTaskHandle;
 static INSSettingsData insSettings;
 static AccelsData accelsData;
+static float dT_filtered = 0.0f;
+static uint32_t sensor_ticks = 0;
+static uint32_t reset_reason = 0; // ***TODO*** Remove!
 
 // These values are initialized by settings but can be updated by the attitude algorithm
 static bool bias_correct_gyro = true;
@@ -146,6 +150,7 @@ static int32_t SensorsInitialize(void)
 	MagBiasInitialize();
 	AttitudeSettingsInitialize();
 	SensorSettingsInitialize();
+	SensorTimeInitialize();
 	INSSettingsInitialize();
 
 #if defined (PIOS_INCLUDE_OPTICALFLOW)
@@ -206,7 +211,7 @@ MODULE_INITCALL(SensorsInitialize, SensorsStart);
 
 
 /**
- * The sensor task.  This polls the gyros at 500 Hz and pumps that data to
+ * The sensor task.  This polls the gyros and pumps that data to
  * stabilization and to the attitude loop
  */
 static void SensorsTask(void *parameters)
@@ -218,6 +223,8 @@ static void SensorsTask(void *parameters)
 	UAVObjEvent ev;
 	settingsUpdatedCb(&ev, NULL, NULL, 0);
 
+	uint32_t timeval = 0;
+	uint32_t prevtimeval = 0;
 
 	// Main task loop
 	lastSysTime = PIOS_Thread_Systime();
@@ -237,13 +244,15 @@ static void SensorsTask(void *parameters)
 		struct pios_sensor_mag_data mags;
 		struct pios_sensor_baro_data baro;
 
-		uint32_t timeval = PIOS_DELAY_GetRaw();
+		prevtimeval = timeval;
+		timeval = PIOS_DELAY_GetRaw();
 
 		//Block on gyro data but nothing else
 		struct pios_queue *queue;
 		queue = PIOS_SENSORS_GetQueue(PIOS_SENSOR_GYRO);
 		if (queue == NULL || PIOS_Queue_Receive(queue, &gyros, SENSOR_PERIOD) == false) {
 			good_runs = 0;
+reset_reason = 3; // ***TODO*** Remove!
 			continue;
 		}
 
@@ -252,12 +261,57 @@ static void SensorsTask(void *parameters)
 			//If no new accels data is ready, reuse the latest sample
 			AccelsSet(&accelsData);
 		}
-		else
+		else {
 			update_accels(&accels);
+		}
+
+		// Determine system time since last reading
+		float dT = PIOS_DELAY_DiffuS2(prevtimeval, timeval) * 1.0e-6f;
+
+		// exponential moving averaging (EMA) of dT to reduce jitter; ~200points
+		// to have more or less equivalent noise reduction to a normal N point moving averaging:  alpha = 2 / (N + 1)
+		// run it only at the beginning for the first samples, to reduce CPU load, and the value should converge to a constant value
+		if (good_runs < 100) {
+			dT_filtered = dT;
+		} else if (good_runs < 2000) {
+			dT_filtered = 0.01f * dT + (1.0f - 0.01f) * dT_filtered;
+		}
+
+		// Prevent div by zero, and assume single ticks before dT_filtered is set
+		float ticks_f;
+		if (dT_filtered != 0.0f) {
+			ticks_f = dT/dT_filtered;
+		} else {
+			ticks_f = 1.0f;
+		}
+
+		// reset filtering if we are outside sane bounds
+		if ((ticks_f > 2.5f) || (ticks_f < 0.5f)) {
+			good_runs = 0;
+reset_reason = 1; // ***TODO*** Remove!
+if (ticks_f <= 0.5f)
+reset_reason = 5;
+else
+reset_reason = 6;
+			dT_filtered = 0.0f;
+			ticks_f = 1.0f;
+		} else {
+			good_runs++;
+		}
 
 		// Update gyros after the accels since the rest of the code expects
 		// the accels to be available first
-		update_gyros(&gyros);
+		uint32_t ticks = roundf(ticks_f);
+		sensor_ticks += ticks;
+		float dT_quatized = dT_filtered * ticks; // ***TODO*** use sensor rate!
+		update_gyros(&gyros, sensor_ticks, dT_quatized);
+
+		// Update the SensorTime UAVO
+SensorTimedTsensorSet(&dT_filtered); // ***TODO*** Update this to use the actual Sensor rate
+SensorTimedTSet(&dT); // ***TODO*** Remove!
+SensorTimeGoodRunsSet(&good_runs); // ***TODO*** Remove!
+SensorTimeResetReasonSet(&reset_reason); // ***TODO*** Remove!
+		SensorTimedTfilteredSet(&dT_filtered);
 
 		queue = PIOS_SENSORS_GetQueue(PIOS_SENSOR_MAG);
 		if (queue != NULL && PIOS_Queue_Receive(queue, &mags, 0) != false) {
@@ -299,23 +353,25 @@ static void SensorsTask(void *parameters)
 		}
 #endif /* PIOS_INCLUDE_RANGEFINDER */
 
-		bool test_good_run = good_runs > REQUIRED_GOOD_CYCLES;
+		// test the number of good cycles, and increment
+		bool test_good_run = (good_runs == REQUIRED_GOOD_CYCLES);
 		#if defined(SUPPORTS_EXTERNAL_MAG)
 		test_good_run = test_good_run && !external_mag_fail;
 		#endif
 
-		if (test_good_run)
+		if (test_good_run) {
 			AlarmsClear(SYSTEMALARMS_ALARM_SENSORS);
-		else
-			good_runs++;
-		
-		PIOS_WDG_UpdateFlag(PIOS_WDG_SENSORS);
+		}
 
-		// Check total time to get the sensors wasn't over the limit
+		// Check total time to get the sensors wasn't over the limit, gross check
 		uint32_t dT_us = PIOS_DELAY_DiffuS(timeval);
-		if (dT_us > (SENSOR_PERIOD * 1000))
+		if (dT_us > (SENSOR_PERIOD * 1000)) {
 			good_runs = 0;
+reset_reason = 2; // ***TODO*** Remove!
+		}
 
+		//kick the dog
+		PIOS_WDG_UpdateFlag(PIOS_WDG_SENSORS);
 	}
 }
 
@@ -354,7 +410,7 @@ static void update_accels(struct pios_sensor_accel_data *accels)
  * @brief Apply calibration and rotation to the raw gyro data
  * @param[in] gyros The raw gyro data
  */
-static void update_gyros(struct pios_sensor_gyro_data *gyros)
+static void update_gyros(struct pios_sensor_gyro_data *gyros, uint32_t total_ticks, float dT)
 {
 	// Scale the gyros
 	float gyros_out[3] = {
@@ -405,6 +461,9 @@ static void update_gyros(struct pios_sensor_gyro_data *gyros)
 			AlarmsClear(SYSTEMALARMS_ALARM_GYROBIAS);
 		}
 	}
+
+	gyrosData.SensorTicks = total_ticks;
+	gyrosData.dT = dT;
 
 	GyrosSet(&gyrosData);
 }
@@ -463,7 +522,7 @@ static void update_baro(struct pios_sensor_baro_data *baro)
 		AlarmsSet(SYSTEMALARMS_ALARM_TEMPBARO, SYSTEMALARMS_ALARM_WARNING);
 		return;
 	}
-	
+
 	AlarmsSet(SYSTEMALARMS_ALARM_TEMPBARO, SYSTEMALARMS_ALARM_OK);
 	BaroAltitudeData baroAltitude;
 	baroAltitude.Temperature = baro->temperature;
@@ -541,18 +600,18 @@ static void updateTemperatureComp(float temperature, float *temp_bias)
 		temp_counter = 0;
 
 		// Compute a third order polynomial for each chanel after each 500 samples
-		temp_bias[0] = gyro_coeff_x[0] + gyro_coeff_x[1] * t + 
+		temp_bias[0] = gyro_coeff_x[0] + gyro_coeff_x[1] * t +
 		               gyro_coeff_x[2] * powf(t,2) + gyro_coeff_x[3] * powf(t,3);
-		temp_bias[1] = gyro_coeff_y[0] + gyro_coeff_y[1] * t + 
+		temp_bias[1] = gyro_coeff_y[0] + gyro_coeff_y[1] * t +
 		               gyro_coeff_y[2] * powf(t,2) + gyro_coeff_y[3] * powf(t,3);
-		temp_bias[2] = gyro_coeff_z[0] + gyro_coeff_z[1] * t + 
+		temp_bias[2] = gyro_coeff_z[0] + gyro_coeff_z[1] * t +
 		               gyro_coeff_z[2] * powf(t,2) + gyro_coeff_z[3] * powf(t,3);
 	}
 }
 
 /**
  * Perform an update of the @ref MagBias based on
- * Magnetometer Offset Cancellation: Theory and Implementation, 
+ * Magnetometer Offset Cancellation: Theory and Implementation,
  * revisited William Premerlani, October 14, 2011
  */
 static void mag_calibration_prelemari(MagnetometerData *mag)
@@ -598,7 +657,7 @@ static void mag_calibration_prelemari(MagnetometerData *mag)
 }
 
 /**
- * Perform an update of the @ref MagBias based on an algorithm 
+ * Perform an update of the @ref MagBias based on an algorithm
  * we developed that tries to drive the magnetometer length to
  * the expected value.  This algorithm seems to work better
  * when not turning a lot.
@@ -607,48 +666,48 @@ static void mag_calibration_fix_length(MagnetometerData *mag)
 {
 	MagBiasData magBias;
 	MagBiasGet(&magBias);
-	
+
 	// Remove the current estimate of the bias
 	mag->x -= magBias.x;
 	mag->y -= magBias.y;
 	mag->z -= magBias.z;
-	
+
 	HomeLocationData homeLocation;
 	HomeLocationGet(&homeLocation);
-	
+
 	AttitudeActualData attitude;
 	AttitudeActualGet(&attitude);
-	
+
 	const float Rxy = sqrtf(homeLocation.Be[0]*homeLocation.Be[0] + homeLocation.Be[1]*homeLocation.Be[1]);
 	const float Rz = homeLocation.Be[2];
-	
+
 	const float rate = insSettings.MagBiasNullingRate;
 	float R[3][3];
 	float B_e[3];
 	float xy[2];
 	float delta[3];
-	
+
 	// Get the rotation matrix
 	Quaternion2R(&attitude.q1, R);
-	
+
 	// Rotate the mag into the NED frame
 	B_e[0] = R[0][0] * mag->x + R[1][0] * mag->y + R[2][0] * mag->z;
 	B_e[1] = R[0][1] * mag->x + R[1][1] * mag->y + R[2][1] * mag->z;
 	B_e[2] = R[0][2] * mag->x + R[1][2] * mag->y + R[2][2] * mag->z;
-	
+
 	float cy = cosf(attitude.Yaw * DEG2RAD);
 	float sy = sinf(attitude.Yaw * DEG2RAD);
-	
+
 	xy[0] =  cy * B_e[0] + sy * B_e[1];
 	xy[1] = -sy * B_e[0] + cy * B_e[1];
-	
+
 	float xy_norm = sqrtf(xy[0]*xy[0] + xy[1]*xy[1]);
-	
+
 	delta[0] = -rate * (xy[0] / xy_norm * Rxy - xy[0]);
 	delta[1] = -rate * (xy[1] / xy_norm * Rxy - xy[1]);
 	delta[2] = -rate * (Rz - B_e[2]);
-	
-	if (delta[0] == delta[0] && delta[1] == delta[1] && delta[2] == delta[2]) {		
+
+	if (delta[0] == delta[0] && delta[1] == delta[1] && delta[2] == delta[2]) {
 		magBias.x += delta[0];
 		magBias.y += delta[1];
 		magBias.z += delta[2];
@@ -666,7 +725,7 @@ static void settingsUpdatedCb(UAVObjEvent * objEv, void *ctx, void *obj, int len
 	SensorSettingsData sensorSettings;
 	SensorSettingsGet(&sensorSettings);
 	INSSettingsGet(&insSettings);
-	
+
 	mag_bias[0] = sensorSettings.MagBias[SENSORSETTINGS_MAGBIAS_X];
 	mag_bias[1] = sensorSettings.MagBias[SENSORSETTINGS_MAGBIAS_Y];
 	mag_bias[2] = sensorSettings.MagBias[SENSORSETTINGS_MAGBIAS_Z];

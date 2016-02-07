@@ -60,6 +60,7 @@
 #include "subtrimsettings.h"
 #include "systemsettings.h"
 #include "manualcontrolcommand.h"
+#include "sensortime.h"
 
 // Math libraries
 #include "coordinate_conversions.h"
@@ -198,8 +199,6 @@ static void stabilizationTask(void* parameters)
 {
 	UAVObjEvent ev;
 
-	uint32_t timeval = PIOS_DELAY_GetRaw();
-
 	ActuatorDesiredData actuatorDesired;
 	StabilizationDesiredData stabDesired;
 	RateDesiredData rateDesired;
@@ -207,6 +206,7 @@ static void stabilizationTask(void* parameters)
 	GyrosData gyrosData;
 	FlightStatusData flightStatus;
 	SystemSettingsAirframeTypeOptions airframe_type;
+	SensorTimeData sensorTime;
 
 	float *stabDesiredAxis = &stabDesired.Roll;
 	float *actuatorDesiredAxis = &actuatorDesired.Roll;
@@ -221,7 +221,9 @@ static void stabilizationTask(void* parameters)
 	const uint32_t SYSTEM_IDENT_PERIOD = 75;
 	uint32_t system_ident_timeval = PIOS_DELAY_GetRaw();
 
-	float dT_filtered = 0;
+	float dT_sensor = 0.0f;
+	float dT = 0.0f;
+	uint32_t sensor_tick_last = 0;
 
 	// Main task loop
 	zero_pids();
@@ -239,18 +241,21 @@ static void stabilizationTask(void* parameters)
 
 		calculate_pids();
 
-		float dT = PIOS_DELAY_DiffuS(timeval) * 1.0e-6f;
-		timeval = PIOS_DELAY_GetRaw();
+		FlightStatusGet(&flightStatus);
+		StabilizationDesiredGet(&stabDesired);
+		AttitudeActualGet(&attitudeActual);
+		GyrosGet(&gyrosData);
+		ActuatorDesiredGet(&actuatorDesired);
+		actuatorDesired.Throttle = stabDesired.Throttle;
+		SensorTimeGet(&sensorTime);
 
-		// exponential moving averaging (EMA) of dT to reduce jitter; ~200points
-		// to have more or less equivalent noise reduction to a normal N point moving averaging:  alpha = 2 / (N + 1)
-		// run it only at the beginning for the first samples, to reduce CPU load, and the value should converge to a constant value
+#if defined(RATEDESIRED_DIAGNOSTICS)
+		RateDesiredGet(&rateDesired);
+#endif
 
-		if (iteration < 100) {
-			dT_filtered = dT;
-		} else if (iteration < 2000) {
-			dT_filtered = 0.01f * dT + (1.0f - 0.01f) * dT_filtered;
-		} else if (iteration == 2000) {
+		// update things if the sensor rate has changed
+		if (dT_sensor != sensorTime.dTsensor) {
+			dT_sensor = sensorTime.dTsensor;
 			gyro_filter_updated = true;
 		}
 
@@ -259,14 +264,14 @@ static void stabilizationTask(void* parameters)
 				gyro_alpha = 0;
 			} else {
 				gyro_alpha = expf(-2.0f * (float)(M_PI) *
-						settings.GyroCutoff * dT_filtered);
+							settings.GyroCutoff * dT_sensor);
 			}
 
 			// Compute time constant for vbar decay term
 			if (settings.VbarTau < 0.001f) {
 				vbar_decay = 0;
 			} else {
-				vbar_decay = expf(-dT_filtered / settings.VbarTau);
+				vbar_decay = expf(-dT_sensor / settings.VbarTau);
 			}
 
 			gyro_filter_updated = false;
@@ -283,6 +288,10 @@ static void stabilizationTask(void* parameters)
 #if defined(RATEDESIRED_DIAGNOSTICS)
 		RateDesiredGet(&rateDesired);
 #endif
+
+		// calculate dT based on sensor rate
+		dT = dT_sensor * (gyrosData.SensorTicks - sensor_tick_last);
+		sensor_tick_last = gyrosData.SensorTicks;
 
 		struct TrimmedAttitudeSetpoint {
 			float Roll;
@@ -833,7 +842,7 @@ static void stabilizationTask(void* parameters)
 #endif
 
 		// Save dT
-		actuatorDesired.UpdateTime = dT * 1000;
+		actuatorDesired.UpdateTime = dT * 1000.0f;
 
 		ActuatorDesiredSet(&actuatorDesired);
 

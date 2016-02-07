@@ -1,0 +1,14 @@
+<xml>
+    <object name="SensorTime" singleinstance="true" settings="false">
+        <description>Settings for the @ref Attitude module</description>
+        <field name="dTfiltered" units="s" type="float" elements="1" defaultvalue="0"/>
+        <field name="dTsensor" units="s" type="float" elements="1" defaultvalue="0"/>
+        <field name="dT" units="s" type="float" elements="1" defaultvalue="0"/>
+        <field name="GoodRuns" units="s" type="uint32" elements="1" defaultvalue="0"/>
+        <field name="ResetReason" units="s" type="uint32" elements="1" defaultvalue="0"/>
+        <access gcs="readwrite" flight="readwrite"/>
+        <telemetrygcs acked="false" updatemode="manual" period="0"/>
+        <telemetryflight acked="false" updatemode="periodic" period="1000"/>
+        <logging updatemode="manual" period="0"/>
+    </object>
+</xml>

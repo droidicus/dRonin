@@ -1,6 +1,6 @@
 <xml>
     <object name="SensorSettings" singleinstance="true" settings="true">
-        <description>Settings for the @ref Attitude module</description>
+        <description>Settings for the @ref Sensor module</description>
         <field name="AccelBias" units="m/s^2" type="float" elementnames="X,Y,Z" defaultvalue="0"/>
         <field name="AccelScale" units="[-]" type="float" elementnames="X,Y,Z" defaultvalue="1"/>
         <field name="GyroScale" units="-" type="float" elementnames="X,Y,Z" defaultvalue="1"/>
