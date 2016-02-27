@@ -102,7 +102,6 @@ static INSSettingsData insSettings;
 static AccelsData accelsData;
 static float dT_filtered = 0.0f;
 static uint32_t sensor_ticks = 0;
-static uint32_t reset_reason = 0; // ***TODO*** Remove!
 
 // These values are initialized by settings but can be updated by the attitude algorithm
 static bool bias_correct_gyro = true;
@@ -252,7 +251,6 @@ static void SensorsTask(void *parameters)
 		queue = PIOS_SENSORS_GetQueue(PIOS_SENSOR_GYRO);
 		if (queue == NULL || PIOS_Queue_Receive(queue, &gyros, SENSOR_PERIOD) == false) {
 			good_runs = 0;
-reset_reason = 3; // ***TODO*** Remove!
 			continue;
 		}
 
@@ -286,14 +284,8 @@ reset_reason = 3; // ***TODO*** Remove!
 		}
 
 		// reset filtering if we are outside sane bounds
-		if ((ticks_f > 2.5f) || (ticks_f < 0.5f)) {
-			good_runs = 0;
-reset_reason = 1; // ***TODO*** Remove!
-if (ticks_f <= 0.5f)
-reset_reason = 5;
-else
-reset_reason = 6;
-			dT_filtered = 0.0f;
+		if ((ticks_f >= 1.5f) || (ticks_f <= 0.5f)) { // ***TODO*** make more lax, currently forces to 1 tick
+			//good_runs = 0; ***TODO*** make this reset when out of range!!!
 			ticks_f = 1.0f;
 		} else {
 			good_runs++;
@@ -308,9 +300,6 @@ reset_reason = 6;
 
 		// Update the SensorTime UAVO
 SensorTimedTsensorSet(&dT_filtered); // ***TODO*** Update this to use the actual Sensor rate
-SensorTimedTSet(&dT); // ***TODO*** Remove!
-SensorTimeGoodRunsSet(&good_runs); // ***TODO*** Remove!
-SensorTimeResetReasonSet(&reset_reason); // ***TODO*** Remove!
 		SensorTimedTfilteredSet(&dT_filtered);
 
 		queue = PIOS_SENSORS_GetQueue(PIOS_SENSOR_MAG);
@@ -367,7 +356,6 @@ SensorTimeResetReasonSet(&reset_reason); // ***TODO*** Remove!
 		uint32_t dT_us = PIOS_DELAY_DiffuS(timeval);
 		if (dT_us > (SENSOR_PERIOD * 1000)) {
 			good_runs = 0;
-reset_reason = 2; // ***TODO*** Remove!
 		}
 
 		//kick the dog

@@ -69,7 +69,7 @@ struct at_queued_data {
 	float u[3];		/* Actuator desired */
 	float throttle;	/* Throttle desired */
 
-	uint32_t raw_time;	/* From PIOS_DELAY_GetRaw() */
+	float dT;	/* From Gyro */
 };
 
 // Private variables
@@ -156,11 +156,11 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 
 	struct at_queued_data *q_item = circ_queue_cur_write_pos(at_queue);
 
-	q_item->raw_time = PIOS_DELAY_GetRaw();
-
 	q_item->y[0] = g->x;
 	q_item->y[1] = g->y;
 	q_item->y[2] = g->z;
+
+	q_item->dT = g->dT;
 
 	ActuatorDesiredData actuators;
 	ActuatorDesiredGet(&actuators);
@@ -257,7 +257,6 @@ static void AutotuneTask(void *parameters)
 
 	af_init(X,P);
 
-	uint32_t last_time = 0.0f;
 	const uint32_t YIELD_MS = 2;
 
 	GyrosConnectCallback(at_new_gyro_data);
@@ -325,7 +324,6 @@ static void AutotuneTask(void *parameters)
 
 				// Spend the first block of time in normal rate mode to get stabilized
 				if (diff_time > PREPARE_TIME) {
-					last_time = PIOS_DELAY_GetRaw();
 
 					/* Drain the queue of all current data */
 					while (circ_queue_read_pos(at_queue)) {
@@ -366,19 +364,12 @@ static void AutotuneTask(void *parameters)
 						break;
 					}
 
-					/* calculate time between successive
-					 * points */
-
-					float dT_s = PIOS_DELAY_DiffuS2(last_time,
-							pt->raw_time) * 1.0e-6f;
-
 					/* This is for the first point, but
 					 * also if we have extended drops */
-					if (dT_s > 0.010f) {
-						dT_s = 0.010f;
+					float dT_s = 0.010f;
+					if ((pt->dT > 0.0f) && (pt->dT < 0.010f)) {
+						dT_s = pt->dT;
 					}
-
-					last_time = pt->raw_time;
 
 					af_predict(X, P, pt->u, pt->y, dT_s, pt->throttle);
 
