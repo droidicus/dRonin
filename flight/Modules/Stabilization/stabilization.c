@@ -246,7 +246,7 @@ static void stabilizationTask(void* parameters)
 		AttitudeActualGet(&attitudeActual);
 		GyrosGet(&gyrosData);
 		ActuatorDesiredGet(&actuatorDesired);
-		actuatorDesired.Throttle = stabDesired.Throttle;
+		actuatorDesired.Thrust = stabDesired.Thrust;
 		SensorTimeGet(&sensorTime);
 
 #if defined(RATEDESIRED_DIAGNOSTICS)
@@ -625,20 +625,17 @@ static void stabilizationTask(void* parameters)
 						ident_iteration++;
 						system_ident_timeval = PIOS_DELAY_GetRaw();
 
-						SystemIdentData systemIdent;
-						SystemIdentGet(&systemIdent);
+						const float AXIS_SCALE = expapprox(7.1f - 9.5f);
+						const float roll_scale = AXIS_SCALE;
+						const float pitch_scale = AXIS_SCALE;
+						const float yaw_scale = AXIS_SCALE;
 
-						const float SCALE_BIAS = 7.1f;
-						float roll_scale = expapprox(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_ROLL]);
-						float pitch_scale = expapprox(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_PITCH]);
-						float yaw_scale = expapprox(SCALE_BIAS - systemIdent.Beta[SYSTEMIDENT_BETA_YAW]);
-
-						if (roll_scale > 0.25f)
-							roll_scale = 0.25f;
-						if (pitch_scale > 0.25f)
-							pitch_scale = 0.25f;
-						if (yaw_scale > 0.25f)
-							yaw_scale = 0.25f;
+//						if (roll_scale > 0.25f)
+//							roll_scale = 0.25f;
+//						if (pitch_scale > 0.25f)
+//							pitch_scale = 0.25f;
+//						if (yaw_scale > 0.25f)
+//							yaw_scale = 0.25f;
 
 						switch(ident_iteration & 0x07) {
 							case 0:

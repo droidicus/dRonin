@@ -78,8 +78,8 @@ static uint32_t thrust_accumulator;
 
 // Private functions
 static void AutotuneTask(void *parameters);
-static void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in);
-static void af_init(float X[AF_NUMX], float P[AF_NUMP]);
+static void af_predict(const float u_in[3], const float gyro[3], const float dT_s, const float t_in);
+static void af_init();
 
 #ifndef AT_QUEUE_NUMELEM
 #define AT_QUEUE_NUMELEM 18
@@ -175,8 +175,7 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 	}
 }
 
-static void UpdateSystemIdent(const float *X, const float *noise,
-		float dT_s, uint32_t predicts, uint32_t spills, float hover_thrust) {
+static void UpdateSystemIdent(float dT_s, uint32_t predicts, uint32_t spills, float hover_thrust) {
 	SystemIdentData system_ident;
 
 	system_ident.Period = dT_s * 1000.0f;
@@ -184,7 +183,7 @@ static void UpdateSystemIdent(const float *X, const float *noise,
 	system_ident.NumAfPredicts = predicts;
 	system_ident.NumSpilledPts = spills;
 
-	system_ident.Hoverthrust = hover_thrust;
+	system_ident.HoverThrust = hover_thrust;
 
 	SystemIdentSet(&system_ident);
 }
@@ -236,7 +235,7 @@ static void AutotuneTask(void *parameters)
 
 	uint32_t last_update_time = PIOS_Thread_Systime();
 
-	af_init(X,P);
+	af_init();
 
 	const uint32_t YIELD_MS = 2;
 
@@ -289,9 +288,9 @@ static void AutotuneTask(void *parameters)
 				// Only start when armed and flying
 				if (flightStatus.Armed == FLIGHTSTATUS_ARMED_ARMED) {
 
-					af_init(X,P);
+					af_init();
 
-					UpdateSystemIdent(X, NULL, 0.0f, 0, 0, 0.0f);
+					UpdateSystemIdent(0.0f, 0, 0, 0.0f);
 
 					state = AT_START;
 
@@ -352,12 +351,7 @@ static void AutotuneTask(void *parameters)
 						dT_s = pt->dT;
 					}
 
-					af_predict(X, P, pt->u, pt->y, dT_s, pt->thrust);
-
-					for (uint32_t i = 0; i < 3; i++) {
-						const float NOISE_ALPHA = 0.9997f;  // 10 second time constant at 300 Hz
-						noise[i] = NOISE_ALPHA * noise[i] + (1-NOISE_ALPHA) * (pt->y[i] - X[i]) * (pt->y[i] - X[i]);
-					}
+					af_predict(pt->u, pt->y, dT_s, pt->thrust);
 
 					//This will work up to 8kHz with an 89% thrust position before overflow
 					thrust_accumulator += 10000 * pt->thrust;
@@ -366,7 +360,7 @@ static void AutotuneTask(void *parameters)
 					// telemetry spam
 					if (!((update_counter++) & 0xff)) {
 						float hover_thrust = ((float)(thrust_accumulator/update_counter))/10000.0f;
-						UpdateSystemIdent(X, noise, dT_s, update_counter, at_points_spilled, hover_thrust);
+						UpdateSystemIdent(dT_s, update_counter, at_points_spilled, hover_thrust);
 					}
 
 					/* Free the buffer containing an AT point */
@@ -385,7 +379,7 @@ static void AutotuneTask(void *parameters)
 				// Wait until disarmed and landed before saving the settings
 
 				float hover_thrust = ((float)(thrust_accumulator/update_counter))/10000.0f;
-				UpdateSystemIdent(X, noise, 0, update_counter, at_points_spilled, hover_thrust);
+				UpdateSystemIdent(0, update_counter, at_points_spilled, hover_thrust);
 
 				save_needed = true;
 				state = AT_WAITING;
@@ -415,7 +409,7 @@ static void AutotuneTask(void *parameters)
  * @param[in] the current control inputs (roll, pitch, yaw)
  * @param[in] the gyro measurements
  */
-__attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], float P[AF_NUMP], const float u_in[3], const float gyro[3], const float dT_s, const float t_in)
+__attribute__((always_inline)) static inline void af_predict(const float u_in[3], const float gyro[3], const float dT_s, const float t_in)
 {
 
 }
@@ -424,7 +418,7 @@ __attribute__((always_inline)) static inline void af_predict(float X[AF_NUMX], f
  * Initialize the state variable and covariance matrix
  * for the system identification EKF
  */
-static void af_init(float X[AF_NUMX], float P[AF_NUMP])
+static void af_init()
 {
 
 }
