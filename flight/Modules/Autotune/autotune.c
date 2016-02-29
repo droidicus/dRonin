@@ -55,8 +55,10 @@
 #include "misc_math.h"
 
 // Private constants
-#define STACK_SIZE_BYTES 3340
+#define STACK_SIZE_BYTES 21340
 #define TASK_PRIORITY PIOS_THREAD_PRIO_NORMAL
+#define AUTOTUNE_CYCLE_LENGTH 600
+#define NUM_UAVO_ELEM 6
 
 // Private types
 enum AUTOTUNE_STATE { AT_INIT, AT_START, AT_RUN, AT_FINISHED, AT_WAITING };
@@ -67,6 +69,7 @@ struct at_queued_data {
 	float thrust;	/* thrust desired */
 
 	float dT;	/* From Gyro */
+	uint32_t ticks; /* From Gyro */
 };
 
 // Private variables
@@ -75,10 +78,13 @@ static bool module_enabled;
 static circ_queue_t at_queue;
 static volatile uint32_t at_points_spilled;
 static uint32_t thrust_accumulator;
+static uint16_t log_index;
 
 // Private functions
 static void AutotuneTask(void *parameters);
-static void af_predict(const float u_in[3], const float gyro[3], const float dT_s, const float t_in);
+static void af_predict(float gyroAccum[AUTOTUNE_CYCLE_LENGTH][3], float actuatorAccum[AUTOTUNE_CYCLE_LENGTH][3],
+						float thrustAccum[AUTOTUNE_CYCLE_LENGTH], const float u_in[3], const float gyro[3],
+						const uint32_t ticks, const float t_in);
 static void af_init();
 
 #ifndef AT_QUEUE_NUMELEM
@@ -112,6 +118,8 @@ int32_t AutotuneInitialize(void)
 		if (!at_queue)
 			module_enabled = false;
 	}
+
+	log_index = 0;
 
 	return 0;
 }
@@ -158,6 +166,7 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 	q_item->y[2] = g->z;
 
 	q_item->dT = g->dT;
+	q_item->ticks = g->SensorTicks;
 
 	ActuatorDesiredData actuators;
 	ActuatorDesiredGet(&actuators);
@@ -175,17 +184,33 @@ static void at_new_gyro_data(UAVObjEvent * ev, void *ctx, void *obj, int len) {
 	}
 }
 
-static void UpdateSystemIdent(float dT_s, uint32_t predicts, uint32_t spills, float hover_thrust) {
+static void UpdateSystemIdent(float gyroAccum[AUTOTUNE_CYCLE_LENGTH][3], float actuatorAccum[AUTOTUNE_CYCLE_LENGTH][3],
+								float thrustAccum[AUTOTUNE_CYCLE_LENGTH], uint16_t numCycles, float dT_s, uint32_t predicts,
+								uint32_t spills, float hover_thrust) {
 	SystemIdentData system_ident;
 
 	system_ident.Period = dT_s * 1000.0f;
 
 	system_ident.NumAfPredicts = predicts;
 	system_ident.NumSpilledPts = spills;
-
 	system_ident.HoverThrust = hover_thrust;
 
+	for (int i = 0; i < NUM_UAVO_ELEM; i++){
+		system_ident.GyroAccumRoll[i] = gyroAccum[log_index + i][1] / numCycles;
+		system_ident.GyroAccumPitch[i] = gyroAccum[log_index + i][2] / numCycles;
+		system_ident.GyroAccumYaw[i] = gyroAccum[log_index + i][3] / numCycles;
+
+		system_ident.ActuatorDesiredAccumRoll[i] = actuatorAccum[log_index + i][1] / numCycles;
+		system_ident.ActuatorDesiredAccumPitch[i] = actuatorAccum[log_index + i][2] / numCycles;
+		system_ident.ActuatorDesiredAccumYaw[i] = actuatorAccum[log_index + i][3] / numCycles;
+
+		system_ident.ActuatorDesiredAccumThrust[i] = thrustAccum[log_index + i] / numCycles;
+	}
+	system_ident.AccumIndex = log_index;
+
 	SystemIdentSet(&system_ident);
+
+	log_index = (log_index + (NUM_UAVO_ELEM/2)) % AUTOTUNE_CYCLE_LENGTH;
 }
 
 static void UpdateStabilizationDesired(bool doingIdent) {
@@ -234,6 +259,11 @@ static void AutotuneTask(void *parameters)
 	enum AUTOTUNE_STATE state = AT_INIT;
 
 	uint32_t last_update_time = PIOS_Thread_Systime();
+
+	float gyroAccum[AUTOTUNE_CYCLE_LENGTH][3] = {0};
+	float actuatorAccum[AUTOTUNE_CYCLE_LENGTH][3] = {0};
+	float thrustAccum[AUTOTUNE_CYCLE_LENGTH] = {0};
+	uint16_t numCycles = 0;
 
 	af_init();
 
@@ -290,7 +320,7 @@ static void AutotuneTask(void *parameters)
 
 					af_init();
 
-					UpdateSystemIdent(0.0f, 0, 0, 0.0f);
+					UpdateSystemIdent(gyroAccum, actuatorAccum, thrustAccum, 1, 0.0f, 0, 0, 0.0f);
 
 					state = AT_START;
 
@@ -316,6 +346,7 @@ static void AutotuneTask(void *parameters)
 					at_points_spilled = 0;
 
 					thrust_accumulator = 0;
+					numCycles = 1;
 
 					state = AT_RUN;
 					last_update_time = PIOS_Thread_Systime();
@@ -344,6 +375,10 @@ static void AutotuneTask(void *parameters)
 						break;
 					}
 
+					if (!(pt->ticks % AUTOTUNE_CYCLE_LENGTH)) {
+						numCycles++;
+					}
+
 					/* This is for the first point, but
 					 * also if we have extended drops */
 					float dT_s = 0.010f;
@@ -351,7 +386,7 @@ static void AutotuneTask(void *parameters)
 						dT_s = pt->dT;
 					}
 
-					af_predict(pt->u, pt->y, dT_s, pt->thrust);
+					af_predict(gyroAccum, actuatorAccum, thrustAccum, pt->u, pt->y, pt->ticks, pt->thrust);
 
 					//This will work up to 8kHz with an 89% thrust position before overflow
 					thrust_accumulator += 10000 * pt->thrust;
@@ -360,7 +395,7 @@ static void AutotuneTask(void *parameters)
 					// telemetry spam
 					if (!((update_counter++) & 0xff)) {
 						float hover_thrust = ((float)(thrust_accumulator/update_counter))/10000.0f;
-						UpdateSystemIdent(dT_s, update_counter, at_points_spilled, hover_thrust);
+						UpdateSystemIdent(gyroAccum, actuatorAccum, thrustAccum, numCycles, dT_s, update_counter, at_points_spilled, hover_thrust);
 					}
 
 					/* Free the buffer containing an AT point */
@@ -379,7 +414,7 @@ static void AutotuneTask(void *parameters)
 				// Wait until disarmed and landed before saving the settings
 
 				float hover_thrust = ((float)(thrust_accumulator/update_counter))/10000.0f;
-				UpdateSystemIdent(0, update_counter, at_points_spilled, hover_thrust);
+				UpdateSystemIdent(gyroAccum, actuatorAccum, thrustAccum, numCycles, 0, update_counter, at_points_spilled, hover_thrust);
 
 				save_needed = true;
 				state = AT_WAITING;
@@ -387,6 +422,12 @@ static void AutotuneTask(void *parameters)
 				break;
 
 			case AT_WAITING:
+				if (!((update_counter++) % 50)) {
+					float hover_thrust = ((float)(thrust_accumulator/update_counter))/10000.0f;
+					UpdateSystemIdent(gyroAccum, actuatorAccum, thrustAccum, numCycles, 0, update_counter, at_points_spilled, hover_thrust);
+				}
+				break;
+
 			default:
 				// Set an alarm or some shit like that
 				break;
@@ -409,9 +450,17 @@ static void AutotuneTask(void *parameters)
  * @param[in] the current control inputs (roll, pitch, yaw)
  * @param[in] the gyro measurements
  */
-__attribute__((always_inline)) static inline void af_predict(const float u_in[3], const float gyro[3], const float dT_s, const float t_in)
+__attribute__((always_inline)) static inline void af_predict(float gyroAccum[AUTOTUNE_CYCLE_LENGTH][3], float actuatorAccum[AUTOTUNE_CYCLE_LENGTH][3],
+																float thrustAccum[AUTOTUNE_CYCLE_LENGTH], const float u_in[3], const float gyro[3],
+																const uint32_t ticks, const float t_in)
 {
+	uint16_t index = ticks % AUTOTUNE_CYCLE_LENGTH;
 
+	for (int i = 0; i < 3; i++) {
+		gyroAccum[index][i] += gyro[i];
+		actuatorAccum[index][i] += u_in[i];
+	}
+	thrustAccum[index] += t_in;
 }
 
 /**

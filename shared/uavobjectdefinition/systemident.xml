@@ -9,6 +9,14 @@
 		<field name="NumAfPredicts" units="" type="uint32" elements="1" defaultvalue="0"/>
 		<field name="NumSpilledPts" units="" type="uint32" elements="1" defaultvalue="0"/>
 		<field name="HoverThrust" units="% / 100" type="float" elements="1" defaultvalue="0"/>
+		<field name="AccumIndex" units="" type="uint32" elements="1" defaultvalue="0"/>
+		<field name="GyroAccumRoll" units="deg/s" type="float" elements="6" defaultvalue="0"/>
+		<field name="GyroAccumPitch" units="deg/s" type="float" elements="6" defaultvalue="0"/>
+		<field name="GyroAccumYaw" units="deg/s" type="float" elements="6" defaultvalue="0"/>
+		<field name="ActuatorDesiredAccumRoll" units="% / 100" type="float" elements="6" defaultvalue="0"/>
+		<field name="ActuatorDesiredAccumPitch" units="% / 100" type="float" elements="6" defaultvalue="0"/>
+		<field name="ActuatorDesiredAccumYaw" units="% / 100" type="float" elements="6" defaultvalue="0"/>
+		<field name="ActuatorDesiredAccumThrust" units="% / 100" type="float" elements="6" defaultvalue="0"/>
 		<access gcs="readwrite" flight="readwrite"/>
 		<telemetrygcs acked="false" updatemode="manual" period="0"/>
 		<telemetryflight acked="false" updatemode="onchange" period="1000"/>

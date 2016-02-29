@@ -219,7 +219,7 @@ static void stabilizationTask(void* parameters)
 	// Settings for system identification
 	uint32_t iteration = 0;
 	const uint32_t SYSTEM_IDENT_PERIOD = 75;
-	uint32_t system_ident_timeval = PIOS_DELAY_GetRaw();
+//	uint32_t system_ident_timeval = PIOS_DELAY_GetRaw();
 
 	float dT_sensor = 0.0f;
 	float dT = 0.0f;
@@ -618,12 +618,12 @@ static void stabilizationTask(void* parameters)
 						pids[PID_GROUP_RATE + i].iAccumulator = 0;
 					}
 
-					static uint32_t ident_iteration = 0;
+//					static uint32_t ident_iteration = 0;
 					static float ident_offsets[3] = {0};
 
-					if (PIOS_DELAY_DiffuS(system_ident_timeval) / 1000.0f > SYSTEM_IDENT_PERIOD && SystemIdentHandle()) {
-						ident_iteration++;
-						system_ident_timeval = PIOS_DELAY_GetRaw();
+					if (SystemIdentHandle()) {
+//						ident_iteration++;
+//						system_ident_timeval = PIOS_DELAY_GetRaw();
 
 						const float AXIS_SCALE = expapprox(7.1f - 9.5f);
 						const float roll_scale = AXIS_SCALE;
@@ -637,7 +637,7 @@ static void stabilizationTask(void* parameters)
 //						if (yaw_scale > 0.25f)
 //							yaw_scale = 0.25f;
 
-						switch(ident_iteration & 0x07) {
+						switch((gyrosData.SensorTicks/SYSTEM_IDENT_PERIOD) & 0x07) {
 							case 0:
 								ident_offsets[0] = 0;
 								ident_offsets[1] = 0;
