@@ -196,15 +196,16 @@ static void UpdateSystemIdent(float gyroAccum[AUTOTUNE_CYCLE_LENGTH][3], float a
 	system_ident.HoverThrust = hover_thrust;
 
 	for (int i = 0; i < NUM_UAVO_ELEM; i++){
-		system_ident.GyroAccumRoll[i] = gyroAccum[log_index + i][1] / numCycles;
-		system_ident.GyroAccumPitch[i] = gyroAccum[log_index + i][2] / numCycles;
-		system_ident.GyroAccumYaw[i] = gyroAccum[log_index + i][3] / numCycles;
+		uint16_t arrayIndex = (log_index + i) % AUTOTUNE_CYCLE_LENGTH;
+		system_ident.GyroAccumRoll[i] = gyroAccum[arrayIndex][0] / numCycles;
+		system_ident.GyroAccumPitch[i] = gyroAccum[arrayIndex][1] / numCycles;
+		system_ident.GyroAccumYaw[i] = gyroAccum[arrayIndex][2] / numCycles;
 
-		system_ident.ActuatorDesiredAccumRoll[i] = actuatorAccum[log_index + i][1] / numCycles;
-		system_ident.ActuatorDesiredAccumPitch[i] = actuatorAccum[log_index + i][2] / numCycles;
-		system_ident.ActuatorDesiredAccumYaw[i] = actuatorAccum[log_index + i][3] / numCycles;
+		system_ident.ActuatorDesiredAccumRoll[i] = actuatorAccum[arrayIndex][0] / numCycles;
+		system_ident.ActuatorDesiredAccumPitch[i] = actuatorAccum[arrayIndex][1] / numCycles;
+		system_ident.ActuatorDesiredAccumYaw[i] = actuatorAccum[arrayIndex][2] / numCycles;
 
-		system_ident.ActuatorDesiredAccumThrust[i] = thrustAccum[log_index + i] / numCycles;
+		system_ident.ActuatorDesiredAccumThrust[i] = thrustAccum[arrayIndex] / numCycles;
 	}
 	system_ident.AccumIndex = log_index;
 
