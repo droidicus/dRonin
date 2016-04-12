@@ -637,11 +637,11 @@ static void stabilizationTask(void* parameters)
 //						if (yaw_scale > 0.25f)
 //							yaw_scale = 0.25f;
 
-						switch((gyrosData.SensorTicks/SYSTEM_IDENT_PERIOD) & 0x07) {
+						switch((gyrosData.SensorTicks/SYSTEM_IDENT_PERIOD) % 9) {
 							case 0:
 								ident_offsets[0] = 0;
 								ident_offsets[1] = 0;
-								ident_offsets[2] = yaw_scale;
+								ident_offsets[2] = 0;
 								break;
 							case 1:
 								ident_offsets[0] = roll_scale;
@@ -649,34 +649,39 @@ static void stabilizationTask(void* parameters)
 								ident_offsets[2] = 0;
 								break;
 							case 2:
-								ident_offsets[0] = 0;
+								ident_offsets[0] = -roll_scale;
 								ident_offsets[1] = 0;
-								ident_offsets[2] = -yaw_scale;
+								ident_offsets[2] = 0;
 								break;
 							case 3:
-								ident_offsets[0] = -roll_scale;
+								ident_offsets[0] = 0;
 								ident_offsets[1] = 0;
 								ident_offsets[2] = 0;
 								break;
 							case 4:
 								ident_offsets[0] = 0;
-								ident_offsets[1] = 0;
-								ident_offsets[2] = yaw_scale;
+								ident_offsets[1] = pitch_scale;
+								ident_offsets[2] = 0;
 								break;
 							case 5:
 								ident_offsets[0] = 0;
-								ident_offsets[1] = pitch_scale;
+								ident_offsets[1] = -pitch_scale;
 								ident_offsets[2] = 0;
 								break;
 							case 6:
 								ident_offsets[0] = 0;
 								ident_offsets[1] = 0;
-								ident_offsets[2] = -yaw_scale;
+								ident_offsets[2] = 0;
 								break;
 							case 7:
 								ident_offsets[0] = 0;
-								ident_offsets[1] = -pitch_scale;
-								ident_offsets[2] = 0;
+								ident_offsets[1] = 0;
+								ident_offsets[2] = yaw_scale;
+								break;
+							case 8:
+								ident_offsets[0] = 0;
+								ident_offsets[1] = 0;
+								ident_offsets[2] = -yaw_scale;
 								break;
 						}
 					}

@@ -55,9 +55,9 @@
 #include "misc_math.h"
 
 // Private constants
-#define STACK_SIZE_BYTES 21340
+#define STACK_SIZE_BYTES 22340
 #define TASK_PRIORITY PIOS_THREAD_PRIO_NORMAL
-#define AUTOTUNE_CYCLE_LENGTH 600
+#define AUTOTUNE_CYCLE_LENGTH 675
 #define NUM_UAVO_ELEM 6
 
 // Private types
